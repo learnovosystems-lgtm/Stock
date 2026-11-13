@@ -160,6 +160,24 @@ Full-sample adaptive: Sharpe **0.61**, return **+38%**, DD −21% (was −0.56 /
 
 Dual-mom promotion unchanged (still production).
 
+## 2026-11-13 — Phase 8 (ATI Desk web dashboard + live paper host)
+
+### Deliverable
+Hosted **ATI Desk** UI (`dashboard/`) with live APIs:
+- Regime, VIX, breadth, MTM paper equity
+- Open positions marked to last close
+- Ranked live opportunities
+- Promoted OOS research sleeves
+- Buttons: Refresh live / Run session (paper entry+exits)
+
+```bash
+python3 -m ati.cli desk-snapshot
+python3 -m ati.cli serve --port 8787
+# open http://127.0.0.1:8787
+```
+
+Live paper (same day): **COFORGE** via `dual_momentum_v2` under BULL regime.
+
 ## Reproduce
 
 ```bash
@@ -173,4 +191,7 @@ python3 -m ati.cli walkforward --mode adaptive --folds 4
 python3 -m ati.cli research --limit 60 --family dual
 python3 -m ati.cli scan --limit 60 --top 5
 python3 -m ati.cli session eod
+python3 -m ati.cli desk-snapshot
+python3 -m ati.cli serve --port 8787
 ```
+

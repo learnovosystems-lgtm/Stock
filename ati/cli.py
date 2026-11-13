@@ -408,5 +408,44 @@ def regime_cmd():
     )
 
 
+@app.command("desk-snapshot")
+def desk_snapshot(
+    scan: bool = typer.Option(True, help="Run live scanner while building snapshot"),
+    limit: int = typer.Option(80, help="Universe limit for scan latency"),
+):
+    """Write dashboard JSON snapshot (paper MTM + regime + opportunities + research)."""
+    from ati.web.snapshot import write_snapshot
+    from pathlib import Path
+
+    ensure_dirs()
+    path = write_snapshot(run_scan=scan, limit_scan=limit)
+    dash = Path("dashboard/data/snapshot.json")
+    dash.parent.mkdir(parents=True, exist_ok=True)
+    dash.write_text(path.read_text())
+    console.print(f"Wrote {path} and {dash}")
+
+
+@app.command("serve")
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Bind host"),
+    port: int = typer.Option(8787, help="Bind port"),
+    seed: bool = typer.Option(True, help="Seed snapshot before listen"),
+):
+    """Host ATI Desk dashboard with live paper/scan APIs."""
+    from ati.web.server import serve as serve_desk
+    from ati.web.snapshot import write_snapshot
+    from pathlib import Path
+
+    if seed:
+        console.print("Seeding live desk snapshot…")
+        path = write_snapshot(run_scan=True, limit_scan=60)
+        dash = Path("dashboard/data/snapshot.json")
+        dash.parent.mkdir(parents=True, exist_ok=True)
+        dash.write_text(path.read_text())
+        console.print(f"Snapshot ready: {dash}")
+    console.print(f"Opening ATI Desk on http://{host}:{port}")
+    serve_desk(host=host, port=port)
+
+
 if __name__ == "__main__":
     app()

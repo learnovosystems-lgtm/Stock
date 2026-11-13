@@ -1,0 +1,10 @@
+{
+  "name": "ati-desk",
+  "private": true,
+  "version": "1.0.0",
+  "description": "ATI Desk — adaptive Indian equities paper trading dashboard",
+  "scripts": {
+    "start": "python3 -m http.server 8787 --bind 127.0.0.1",
+    "build": "mkdir -p dist && cp index.html styles.css app.js dist/ && cp -r data dist/data"
+  }
+}
