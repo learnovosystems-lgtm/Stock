@@ -10,6 +10,15 @@ from ati.regime.detector import RegimeState
 from ati.strategies.base import RawSignal
 
 
+# Map strategy_id prefixes / baseline ids → family for metric lookup
+_FAMILY_ALIASES = {
+    "breakout_momentum_baseline": "breakout",
+    "pullback_trend_baseline": "pullback",
+    "dual_momentum_baseline": "relative_strength",
+    "breakout_param_search": "breakout",
+}
+
+
 @dataclass
 class SelectionResult:
     selected: list[RawSignal]
@@ -24,16 +33,44 @@ def _stability_adjusted_score(m: StrategyMetrics) -> float:
     Do NOT pick solely on highest recent return.
     """
     ret_component = m.expectancy
-    sharpe_component = max(m.sharpe, -1.0)
+    sharpe_component = max(min(m.sharpe, 3.0), -2.0)
     dd_penalty = abs(m.max_drawdown) * 1.5
     stability = m.stability_score
-    # Unstable high-return strategies get crushed
     return (0.35 * sharpe_component + 0.35 * ret_component + 0.4 * stability) - dd_penalty
+
+
+def _family_of_metric(strategy_id: str) -> str:
+    if strategy_id in _FAMILY_ALIASES:
+        return _FAMILY_ALIASES[strategy_id]
+    for fam in (
+        "relative_strength",
+        "trend_following",
+        "mean_reversion",
+        "statistical_arbitrage",
+        "volatility_expansion",
+        "multi_factor",
+        "momentum",
+        "breakout",
+        "pullback",
+        "reversal",
+    ):
+        if strategy_id.startswith(fam) or fam in strategy_id:
+            return fam
+    return strategy_id.split("_")[0]
 
 
 class StrategySelector:
     def __init__(self, metrics: list[StrategyMetrics] | None = None):
         self.metrics = metrics or []
+
+    def _metrics_for_family(self, family: str, regime: MarketRegime, cap: str | None) -> list[StrategyMetrics]:
+        relevant = [m for m in self.metrics if _family_of_metric(m.strategy_id) == family]
+        if cap:
+            capped = [m for m in relevant if m.cap_bucket in (cap, "ALL")]
+            if capped:
+                relevant = capped
+        regime_metrics = [m for m in relevant if m.regime in (regime.value, "ALL")]
+        return regime_metrics or relevant
 
     def family_weight(self, family: str, regime: MarketRegime, cap: str | None = None) -> float:
         preferred = {
@@ -60,30 +97,29 @@ class StrategySelector:
             },
             MarketRegime.UNCERTAIN: set(),
         }[regime]
-        base = 1.0 if family in preferred else 0.25
         if regime == MarketRegime.UNCERTAIN:
             return 0.0
 
-        relevant = [
-            m
-            for m in self.metrics
-            if m.strategy_id.startswith(family) or m.strategy_id.startswith(family.split("_")[0])
-            or family in m.strategy_id
-            or m.strategy_id.replace("_v1", "") == family
-            or True  # soft match via family field encoded in strategy_id prefixes
-        ]
-        # Better match: metrics store strategy_id like momentum_v1
-        relevant = [m for m in self.metrics if family in m.strategy_id or m.strategy_id.startswith(family)]
-        if cap:
-            cap_metrics = [m for m in relevant if m.cap_bucket in (cap, "ALL")]
-            if cap_metrics:
-                relevant = cap_metrics
-        regime_metrics = [m for m in relevant if m.regime in (regime.value, "ALL")]
-        pool = regime_metrics or relevant
+        # Measured improvement bias: after negative daily breakout/pullback results,
+        # prefer relative_strength / trend in bull regimes unless metrics overturn this.
+        prior_boost = 0.0
+        if regime == MarketRegime.BULL and family in ("relative_strength", "trend_following", "momentum"):
+            prior_boost = 0.15
+        if family in ("breakout", "pullback"):
+            prior_boost = -0.1  # demote until metrics recover
+
+        base = (1.0 if family in preferred else 0.25) + prior_boost
+        pool = self._metrics_for_family(family, regime, cap)
         if not pool:
-            return base
+            return max(0.0, base)
+
+        # Hard penalty: if latest measured expectancy and sharpe are both negative, crush weight
+        latest = pool[-1]
+        if latest.expectancy < 0 and latest.sharpe < 0:
+            return max(0.0, base * 0.15)
+
         adj = sum(_stability_adjusted_score(m) for m in pool) / len(pool)
-        return max(0.0, base * (0.6 + 0.4 * _sigmoid(adj)))
+        return max(0.0, base * (0.55 + 0.45 * _sigmoid(adj)))
 
     def select(
         self,
@@ -102,7 +138,7 @@ class StrategySelector:
         for sig in signals:
             w = self.family_weight(sig.family, regime.regime, cap=cap)
             family_weights[sig.family] = w
-            if w <= 0:
+            if w <= 0.05:
                 continue
             final = sig.score * w * (0.7 + 0.3 * regime.confidence)
             if final >= min_score and sig.risk_reward >= 2.0:
@@ -112,12 +148,10 @@ class StrategySelector:
             return SelectionResult([], False, "No strategy cleared stability-weighted threshold", family_weights)
 
         weighted.sort(key=lambda x: x[0], reverse=True)
-        # Ensemble if top independent families agree on LONG
         longs = [s for _, s in weighted if s.direction == "LONG"]
         families = {s.family for s in longs}
         ensemble = len(families) >= ensemble_min_agree
         if ensemble:
-            # Keep top signal from each agreeing family (max 3)
             chosen: list[RawSignal] = []
             seen: set[str] = set()
             for _, s in weighted:

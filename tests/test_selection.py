@@ -68,3 +68,32 @@ def test_ensemble_when_multiple_families_agree():
     )
     assert out.ensemble
     assert len(out.selected) >= 2
+
+
+def test_negative_measured_metrics_crush_family_weight():
+    from datetime import datetime, timezone
+
+    from ati.models.opportunity import StrategyMetrics
+
+    metrics = [
+        StrategyMetrics(
+            strategy_id="breakout_momentum_baseline",
+            version="1.0.0",
+            sample_count=37,
+            win_rate=0.4,
+            expectancy=-0.005,
+            sharpe=-0.45,
+            sortino=-0.4,
+            max_drawdown=-0.12,
+            profit_factor=0.7,
+            avg_holding_days=15,
+            stability_score=0.3,
+            total_return=-0.05,
+            created_at=datetime.now(timezone.utc),
+        )
+    ]
+    sel = StrategySelector(metrics)
+    w_break = sel.family_weight("breakout", MarketRegime.BULL)
+    w_rs = sel.family_weight("relative_strength", MarketRegime.BULL)
+    assert w_break < w_rs
+    assert w_break < 0.3

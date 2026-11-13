@@ -12,7 +12,7 @@ import pandas as pd
 from ati.engine.risk import RiskEngine
 from ati.indicators.technical import enrich
 from ati.models.opportunity import StrategyMetrics
-from ati.research.backtest import BacktestResult, _max_drawdown, _stability
+from ati.research.backtest import BacktestResult, _max_drawdown, _stability, run_dual_momentum_baseline
 from ati.research.registry import StrategyRegistry
 
 
@@ -216,4 +216,69 @@ class ResearchLaboratory:
                 self.registry.record_metrics(metrics, production=False)
             results.append(ExperimentResult("breakout_param_search", params, metrics, promoted))
         results.sort(key=lambda r: (r.promoted_candidate, r.metrics.sharpe, r.metrics.stability_score), reverse=True)
+        return results
+
+    def search_dual_momentum_params(
+        self,
+        frames: dict[str, pd.DataFrame],
+        nifty: pd.DataFrame | None = None,
+    ) -> list[ExperimentResult]:
+        train, test = self.walk_forward_split(frames)
+        # Split nifty the same way when available
+        nifty_train = nifty_test = None
+        if nifty is not None and len(nifty) > 100:
+            cut = int(len(nifty) * 0.7)
+            nifty_train, nifty_test = nifty.iloc[:cut], nifty.iloc[cut:]
+
+        grid = {
+            "lookback": [63, 84, 105],
+            "top_n": [2, 3],
+            "rebalance_every": [21, 42, 63],
+            "abs_mom_floor": [0.0, 0.03],
+        }
+        keys = list(grid.keys())
+        results: list[ExperimentResult] = []
+        for values in product(*[grid[k] for k in keys]):
+            params = dict(zip(keys, values))
+            train_bt = run_dual_momentum_baseline(train, nifty_train, **params)
+            test_bt = run_dual_momentum_baseline(test, nifty_test, **params)
+            metrics = StrategyMetrics(
+                strategy_id="dual_momentum_baseline",
+                version=(
+                    f"lb{params['lookback']}_n{params['top_n']}_"
+                    f"rb{params['rebalance_every']}_f{params['abs_mom_floor']}"
+                ),
+                sample_count=test_bt.trades,
+                win_rate=test_bt.win_rate,
+                expectancy=test_bt.expectancy,
+                sharpe=test_bt.sharpe,
+                sortino=test_bt.sortino,
+                max_drawdown=test_bt.max_drawdown,
+                profit_factor=test_bt.profit_factor,
+                avg_holding_days=test_bt.avg_holding_days,
+                stability_score=test_bt.stability_score,
+                total_return=test_bt.total_return,
+                oos=True,
+            )
+            promoted = (
+                test_bt.trades >= 6
+                and test_bt.sharpe > 0.2
+                and test_bt.stability_score >= 0.35
+                and test_bt.max_drawdown > -0.22
+                and test_bt.total_return > 0
+                and train_bt.sharpe > -0.3
+            )
+            self.registry.record_experiment(
+                name="dual_momentum_search",
+                params=params,
+                result=metrics.model_dump(mode="json"),
+                success=promoted,
+            )
+            if promoted:
+                self.registry.record_metrics(metrics, production=False)
+            results.append(ExperimentResult("dual_momentum_search", params, metrics, promoted))
+        results.sort(
+            key=lambda r: (r.promoted_candidate, r.metrics.sharpe, r.metrics.stability_score),
+            reverse=True,
+        )
         return results
