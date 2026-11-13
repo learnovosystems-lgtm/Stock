@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ATI Desk — Adaptive Indian Equities</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true"></div>
+  <header class="top">
+    <div class="brand-block">
+      <p class="brand">ATI Desk</p>
+      <p class="tagline" id="tagline">Adaptive Indian equities — paper ₹1L</p>
+    </div>
+    <div class="top-meta">
+      <span class="pill" id="marketPill">—</span>
+      <span class="pill muted" id="clock">—</span>
+      <button type="button" class="btn ghost" id="btnRefresh">Refresh live</button>
+      <button type="button" class="btn primary" id="btnSession">Run session</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow" id="regimeEyebrow">Market regime</p>
+        <h1 id="regimeTitle">—</h1>
+        <p class="lede" id="regimeNotes">Loading live desk…</p>
+        <div class="cta-row">
+          <div class="stat">
+            <span class="stat-label">MTM equity</span>
+            <span class="stat-value" id="equityMtm">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Paper P&amp;L</span>
+            <span class="stat-value" id="mtmReturn">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">India VIX</span>
+            <span class="stat-value" id="vix">—</span>
+          </div>
+        </div>
+      </div>
+      <aside class="hero-panel" aria-label="Promoted research">
+        <p class="panel-title">Promoted OOS sleeves</p>
+        <ul id="promotedList" class="promoted"></ul>
+        <p class="panel-foot" id="researchNote"></p>
+      </aside>
+    </section>
+
+    <section class="strip" aria-label="Desk metrics">
+      <div><span>NIFTY</span><strong id="niftyLast">—</strong></div>
+      <div><span>Breadth</span><strong id="breadth">—</strong></div>
+      <div><span>Confidence</span><strong id="confidence">—</strong></div>
+      <div><span>Universe</span><strong id="universe">—</strong></div>
+      <div><span>Cash</span><strong id="cash">—</strong></div>
+      <div><span>Open risk</span><strong id="openPos">—</strong></div>
+    </section>
+
+    <section class="grid-2">
+      <div class="block">
+        <div class="block-head">
+          <h2>Live positions</h2>
+          <p>Marked to last close · hard risk rules on</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th><th>Qty</th><th>Entry</th><th>Last</th><th>P&amp;L</th><th>Stop</th><th>Strategy</th>
+              </tr>
+            </thead>
+            <tbody id="posBody"></tbody>
+          </table>
+          <p class="empty" id="posEmpty" hidden>No open paper positions.</p>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="block-head">
+          <h2>Ranked opportunities</h2>
+          <p id="scanMeta">Live scanner</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Stock</th><th>Signal</th><th>Score</th><th>Strategy</th><th>R:R</th>
+              </tr>
+            </thead>
+            <tbody id="oppBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2>Backdated research</h2>
+        <p>Walk-forward OOS · real NSE data · costs included</p>
+      </div>
+      <div class="metrics" id="metricsGrid"></div>
+    </section>
+
+    <section class="block log-block">
+      <div class="block-head">
+        <h2>Session log</h2>
+        <p>Last action output</p>
+      </div>
+      <pre id="log">Ready.</pre>
+    </section>
+  </main>
+
+  <footer>
+    <p>ATI · paper trading only · not investment advice · ₹1,00,000 starting capital · max 3 positions · 1% risk/trade</p>
+    <p id="generatedAt"></p>
+  </footer>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>

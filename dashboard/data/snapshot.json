@@ -1,0 +1,286 @@
+{
+  "generated_at": "2026-11-13T11:30:02.934813+00:00",
+  "market_open": false,
+  "brand": "ATI Desk",
+  "tagline": "Adaptive Indian equities \u2014 paper \u20b91L",
+  "regime": {
+    "regime": "BULL",
+    "confidence": 0.616,
+    "nifty_trend": 0.0284,
+    "india_vix": 15.41,
+    "breadth": 0.84,
+    "adx": 39.94,
+    "notes": "Positive 63d NIFTY with strong ADX and breadth; MA stack not fully aligned \u2014 reduced confidence; HMM state=0:SIDEWAYS conf=0.61",
+    "preferred_families": [
+      "momentum",
+      "relative_strength",
+      "trend_following",
+      "breakout",
+      "pullback",
+      "multi_factor"
+    ],
+    "nifty_last": 25129.80078125
+  },
+  "account": {
+    "cash": 33894.85,
+    "equity_book": 100000.0,
+    "equity_mtm": 100818.85,
+    "day_pnl": 0.0,
+    "open_positions": 1,
+    "starting_capital": 100000.0,
+    "mtm_return": 0.0082
+  },
+  "positions": [
+    {
+      "symbol": "COFORGE",
+      "qty": 33,
+      "entry": 2003.19,
+      "last": 2028.0,
+      "stop": 1972.0,
+      "t1": 2140.0,
+      "t2": 2196.0,
+      "t3": 2294.87,
+      "unrealized_pnl": 818.85,
+      "unrealized_pct": 0.0124,
+      "strategy": "dual_momentum_v2",
+      "opened_at": "2026-11-13T10:25:34.229053+00:00",
+      "bars_held": 0
+    }
+  ],
+  "opportunities": [
+    {
+      "stock": "COFORGE",
+      "signal": "BUY",
+      "score": 72.5,
+      "strategy": "dual_momentum_v2",
+      "entry": 2001.585009765625,
+      "stop": 1972.0,
+      "t1": 2140.0,
+      "rr": 4.678551446523433,
+      "sector": "IT"
+    },
+    {
+      "stock": "PERSISTENT",
+      "signal": "BUY",
+      "score": 71.7,
+      "strategy": "dual_momentum_v2",
+      "entry": 5923.925,
+      "stop": 5884.0,
+      "t1": 6251.544632796906,
+      "rr": 8.205876838995717,
+      "sector": "IT"
+    },
+    {
+      "stock": "TECHM",
+      "signal": "BUY",
+      "score": 67.9,
+      "strategy": "ensemble:relative_strength+trend_following",
+      "entry": 1764.0,
+      "stop": 1737.54,
+      "t1": 1834.1135903712407,
+      "rr": 2.6497955544686533,
+      "sector": "IT"
+    },
+    {
+      "stock": "HCLTECH",
+      "signal": "BUY",
+      "score": 65.0,
+      "strategy": "ensemble:relative_strength+trend_following",
+      "entry": 1378.0,
+      "stop": 1357.33,
+      "t1": 1435.9879131036248,
+      "rr": 2.8054142769049153,
+      "sector": "IT"
+    },
+    {
+      "stock": "KOTAKBANK",
+      "signal": "WAIT",
+      "score": 61.6,
+      "strategy": "relative_strength_v1",
+      "entry": 487.08433782958986,
+      "stop": 468.10808652798096,
+      "t1": 529.4337903229443,
+      "rr": 2.2317080344400733,
+      "sector": "PRIVATE_BANK"
+    }
+  ],
+  "scan": {
+    "regime": "BULL",
+    "regime_notes": "Positive 63d NIFTY with strong ADX and breadth; MA stack not fully aligned \u2014 reduced confidence; HMM state=0:SIDEWAYS conf=0.61; NIFTY>SMA200=ON; VIX<18=ON; breadth=0.92; risk_on=ON",
+    "scanned": 50,
+    "generated_at": "2026-11-13T11:29:23.354561+00:00"
+  },
+  "production": [
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_4fold_lb84_rb42",
+      "sample_count": 27,
+      "win_rate": 0.5814814814814815,
+      "expectancy": 0.13091242498311856,
+      "sharpe": 0.6817153120385999,
+      "sortino": 0.7187996222618788,
+      "max_drawdown": -0.20989015078922058,
+      "profit_factor": 6.626268048417832,
+      "avg_holding_days": 57.56666666666666,
+      "stability_score": 0.39350277353899926,
+      "total_return": 0.2877026703102925,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": true,
+      "created_at": "2026-11-13T11:11:57.823228Z",
+      "production": true
+    },
+    {
+      "strategy_id": "regime_adaptive_multi",
+      "version": "wf_4fold_adaptive",
+      "sample_count": 34,
+      "win_rate": 0.6018518518518517,
+      "expectancy": 0.057632668710907574,
+      "sharpe": 0.6814945313668503,
+      "sortino": 0.6703565165149343,
+      "max_drawdown": -0.21180048422150888,
+      "profit_factor": 5.121328677041583,
+      "avg_holding_days": 31.048148148148147,
+      "stability_score": 0.4766456607441173,
+      "total_return": 0.15161507182984935,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": true,
+      "created_at": "2026-11-13T11:26:02.609349Z",
+      "production": true
+    }
+  ],
+  "metrics": [
+    {
+      "strategy_id": "regime_adaptive_multi",
+      "version": "1.0.0-regime-switch",
+      "sharpe": -0.56,
+      "total_return": -0.188,
+      "max_drawdown": -0.219,
+      "stability": 0.322,
+      "trades": 11,
+      "oos": false
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_4fold_lb84_rb42",
+      "sharpe": 0.682,
+      "total_return": 0.288,
+      "max_drawdown": -0.21,
+      "stability": 0.394,
+      "trades": 27,
+      "oos": true
+    },
+    {
+      "strategy_id": "regime_adaptive_multi",
+      "version": "wf_4fold_adaptive",
+      "sharpe": 0.43,
+      "total_return": 0.104,
+      "max_drawdown": -0.212,
+      "stability": 0.325,
+      "trades": 81,
+      "oos": true
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_3fold_lb84_rb42",
+      "sharpe": 0.729,
+      "total_return": 0.046,
+      "max_drawdown": -0.063,
+      "stability": 0.486,
+      "trades": 12,
+      "oos": true
+    },
+    {
+      "strategy_id": "regime_adaptive_multi",
+      "version": "wf_4fold_adaptive",
+      "sharpe": 0.43,
+      "total_return": 0.104,
+      "max_drawdown": -0.212,
+      "stability": 0.325,
+      "trades": 81,
+      "oos": true
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_3fold_lb84_rb42",
+      "sharpe": 0.729,
+      "total_return": 0.046,
+      "max_drawdown": -0.063,
+      "stability": 0.486,
+      "trades": 12,
+      "oos": true
+    },
+    {
+      "strategy_id": "regime_adaptive_multi",
+      "version": "wf_4fold_adaptive",
+      "sharpe": 0.681,
+      "total_return": 0.152,
+      "max_drawdown": -0.212,
+      "stability": 0.477,
+      "trades": 34,
+      "oos": true
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_4fold_lb84_rb42",
+      "sharpe": 0.682,
+      "total_return": 0.288,
+      "max_drawdown": -0.21,
+      "stability": 0.394,
+      "trades": 27,
+      "oos": true
+    },
+    {
+      "strategy_id": "regime_adaptive_multi",
+      "version": "1.0.0-regime-switch",
+      "sharpe": 0.606,
+      "total_return": 0.377,
+      "max_drawdown": -0.212,
+      "stability": 0.328,
+      "trades": 16,
+      "oos": false
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_3fold_lb84_rb42",
+      "sharpe": 0.729,
+      "total_return": 0.046,
+      "max_drawdown": -0.063,
+      "stability": 0.486,
+      "trades": 12,
+      "oos": true
+    },
+    {
+      "strategy_id": "regime_adaptive_multi",
+      "version": "wf_4fold_adaptive",
+      "sharpe": 0.681,
+      "total_return": 0.152,
+      "max_drawdown": -0.212,
+      "stability": 0.477,
+      "trades": 34,
+      "oos": true
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_3fold_lb84_rb42",
+      "sharpe": 0.729,
+      "total_return": 0.046,
+      "max_drawdown": -0.063,
+      "stability": 0.486,
+      "trades": 12,
+      "oos": true
+    }
+  ],
+  "universe_size": 119,
+  "research": {
+    "dual_momentum_oos_sharpe": 0.68,
+    "adaptive_oos_sharpe": 0.68,
+    "adaptive_oos_stability": 0.48,
+    "promoted": [
+      "dual_momentum_nifty_gated",
+      "regime_adaptive_multi"
+    ],
+    "note": "Walk-forward OOS promoted sleeves; paper entries gated to measured families."
+  }
+}
