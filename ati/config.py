@@ -61,10 +61,16 @@ class AppConfig:
     production_strategy_flag: str = "production"
     # Require NIFTY above this SMA before new risk-on entries
     nifty_trend_sma: int = 200
-    # Paper trading: only auto-enter these strategy id fragments
+    # Paper trading: regime-switched families (breakout/pullback still demoted)
     paper_allowed_strategy_substrings: tuple[str, ...] = (
         "dual_momentum",
         "relative_strength",
+        "trend_following",
+        "mean_reversion",
+        "multi_factor",
+        "momentum",
+        "ensemble",
+        "regime_adaptive",
     )
 
 

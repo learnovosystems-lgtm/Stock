@@ -17,6 +17,8 @@ _FAMILY_ALIASES = {
     "dual_momentum_baseline": "relative_strength",
     "dual_momentum_nifty_gated": "relative_strength",
     "breakout_param_search": "breakout",
+    "mean_reversion_baseline": "mean_reversion",
+    "regime_adaptive_multi": "multi_factor",
 }
 
 
@@ -102,10 +104,14 @@ class StrategySelector:
             return 0.0
 
         # Measured improvement bias: after negative daily breakout/pullback results,
-        # prefer relative_strength / trend in bull regimes unless metrics overturn this.
+        # prefer relative_strength / trend in bull; mean_reversion in sideways/bear.
         prior_boost = 0.0
         if regime == MarketRegime.BULL and family in ("relative_strength", "trend_following", "momentum"):
             prior_boost = 0.15
+        if regime == MarketRegime.SIDEWAYS and family in ("mean_reversion", "multi_factor"):
+            prior_boost = 0.15
+        if regime == MarketRegime.BEAR and family in ("mean_reversion", "reversal"):
+            prior_boost = 0.10
         if family in ("breakout", "pullback"):
             prior_boost = -0.1  # demote until metrics recover
 

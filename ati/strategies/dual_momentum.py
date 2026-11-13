@@ -23,10 +23,11 @@ from ati.strategies.common import (
 class DualMomentumStrategy(Strategy):
     id = "dual_momentum_v2"
     family = "relative_strength"
-    version = "2.1.0"
+    version = "2.2.0"
 
     def suitable_regimes(self) -> set[MarketRegime]:
-        return {MarketRegime.BULL, MarketRegime.SIDEWAYS}
+        # Dual-mom is a BULL book; SIDEWAYS handled by mean_reversion via selector
+        return {MarketRegime.BULL}
 
     def generate(self, ctx: StrategyContext) -> Optional[RawSignal]:
         d = prepare_daily(ctx.daily)
@@ -38,6 +39,10 @@ class DualMomentumStrategy(Strategy):
         # India VIX overlay — cash bias when fear elevated
         vix = ctx.extras.get("india_vix")
         if vix is not None and india_vix_elevated(vix, threshold=18.0):
+            return None
+        # regime.breadth is [-1,1]; require ≥40% of names rising
+        breadth_share = (ctx.regime.breadth + 1.0) / 2.0
+        if breadth_share < 0.40:
             return None
 
         last = d.iloc[-1]

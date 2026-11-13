@@ -44,8 +44,9 @@ def _default_scanner() -> MarketScanner:
 
 
 def _is_gated_candidate(strategy_selected: str) -> bool:
+    """Allow regime-appropriate families configured for paper auto-entry."""
     s = strategy_selected.lower()
-    return "dual_momentum" in s or "relative_strength" in s
+    return any(frag.lower() in s for frag in DEFAULT.paper_allowed_strategy_substrings)
 
 
 def run_intrasession_once(scanner: MarketScanner | None = None, broker: PaperBroker | None = None) -> dict:

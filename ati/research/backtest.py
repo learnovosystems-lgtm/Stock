@@ -429,13 +429,21 @@ def run_dual_momentum_baseline(
     trade_start=None,
     india_vix: pd.DataFrame | None = None,
     vix_cash_threshold: float | None = 18.0,
+    min_breadth: float | None = 0.40,
+    max_portfolio_dd: float | None = -0.20,
 ) -> BacktestResult:
-    """Low-turnover dual momentum with NIFTY SMA gate, sector neutrality, optional VIX cash.
+    """Low-turnover dual momentum with NIFTY/VIX/breadth gates + DD kill-switch.
 
-    Phase-4: India VIX overlay flattens to cash when VIX >= threshold to stabilize
-    weak high-vol OOS folds.
+    Phase-5/6: breadth cash filter + DD kill-switch (peak reset after flatten so
+    the book is not permanently locked in cash).
     """
-    from ati.research.gates import india_vix_elevated, nifty_above_sma, sector_neutral_scores
+    from ati.research.gates import (
+        drawdown_from_peak,
+        india_vix_elevated,
+        nifty_above_sma,
+        sector_neutral_scores,
+        universe_breadth,
+    )
 
     risk = risk or DEFAULT.risk
     cost_rt = RiskEngine(risk).round_trip_cost_pct()
@@ -483,6 +491,8 @@ def run_dual_momentum_baseline(
     trades: list[dict] = []
     curve: list[tuple] = []
     last_reb = -10_000
+    peak_equity = initial_capital
+    dd_halt = False
 
     def portfolio_value(i: int) -> float:
         value = cash
@@ -516,6 +526,24 @@ def run_dual_momentum_baseline(
     for i, dt in enumerate(dates):
         equity = portfolio_value(i)
         curve.append((dt, equity))
+        dd, peak_equity = drawdown_from_peak([equity], peak_equity)
+
+        # Kill-switch: flatten on DD breach, then reset peak so cash-flat does not
+        # permanently lock the book (equity cannot recover vs an old peak while flat).
+        in_trade_window = trade_start_ts is None or pd.Timestamp(dt) >= trade_start_ts
+        if max_portfolio_dd is not None and in_trade_window and dd <= max_portfolio_dd and not dd_halt:
+            if holdings:
+                for sym in list(holdings):
+                    close_position(sym, i, "dd_killswitch")
+                curve[-1] = (dt, portfolio_value(i))
+                last_reb = i
+            dd_halt = True
+            peak_equity = portfolio_value(i)  # new high-water mark after defensive flatten
+            continue
+        # Cool-off: stay flat for one rebalance cycle after a kill
+        if dd_halt and i - last_reb >= rebalance_every:
+            dd_halt = False
+
         if i < max(lookback, nifty_sma_gate or 0):
             continue
         if trade_start_ts is not None and pd.Timestamp(dt) < trade_start_ts:
@@ -523,7 +551,7 @@ def run_dual_momentum_baseline(
         if i - last_reb < rebalance_every:
             continue
 
-        # Hard cash gates: NIFTY below SMA and/or elevated India VIX
+        # Hard cash gates: NIFTY / VIX / breadth / DD halt
         risk_on = True
         cash_reason = "nifty_gate_cash"
         if nifty_sma_gate and nifty_aligned is not None:
@@ -532,6 +560,14 @@ def run_dual_momentum_baseline(
             if india_vix_elevated(vix_aligned.iloc[: i + 1], threshold=vix_cash_threshold):
                 risk_on = False
                 cash_reason = "vix_gate_cash"
+        if risk_on and min_breadth is not None:
+            breadth = universe_breadth(panel, i, lookback)
+            if breadth < min_breadth:
+                risk_on = False
+                cash_reason = "breadth_gate_cash"
+        if risk_on and dd_halt:
+            risk_on = False
+            cash_reason = "dd_halt_cash"
 
         if not risk_on:
             for sym in list(holdings):
