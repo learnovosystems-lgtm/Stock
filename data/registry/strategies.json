@@ -1,0 +1,1522 @@
+{
+  "strategies": [
+    {
+      "strategy_id": "breakout_momentum_baseline",
+      "version": "1.0.0",
+      "sample_count": 94,
+      "win_rate": 0.3723404255319149,
+      "expectancy": -0.006495921417541694,
+      "sharpe": -0.9435573237369166,
+      "sortino": -1.276866326716914,
+      "max_drawdown": -0.21645469579433296,
+      "profit_factor": 0.7288764947431533,
+      "avg_holding_days": 12.53191489361702,
+      "stability_score": 0.9874114097458144,
+      "total_return": -0.16305782964364668,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T08:27:32.870105",
+      "production": false
+    },
+    {
+      "strategy_id": "breakout_momentum_baseline",
+      "version": "1.0.0",
+      "sample_count": 37,
+      "win_rate": 0.43243243243243246,
+      "expectancy": -0.005502409684191682,
+      "sharpe": -0.458332231726808,
+      "sortino": -0.4846335489282088,
+      "max_drawdown": -0.12015667584350154,
+      "profit_factor": 0.7769378112363171,
+      "avg_holding_days": 15.64864864864865,
+      "stability_score": 0.2922294113142444,
+      "total_return": -0.05476813610903131,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T08:28:27.857520",
+      "production": false
+    },
+    {
+      "strategy_id": "breakout_momentum_baseline",
+      "version": "1.0.0",
+      "sample_count": 37,
+      "win_rate": 0.43243243243243246,
+      "expectancy": -0.005502409684191682,
+      "sharpe": -0.458332231726808,
+      "sortino": -0.4846335489282088,
+      "max_drawdown": -0.12015667584350154,
+      "profit_factor": 0.7769378112363171,
+      "avg_holding_days": 15.64864864864865,
+      "stability_score": 0.2922294113142444,
+      "total_return": -0.05476813610903131,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T08:30:13.855268",
+      "production": false
+    },
+    {
+      "strategy_id": "pullback_trend_baseline",
+      "version": "1.0.0",
+      "sample_count": 60,
+      "win_rate": 0.31666666666666665,
+      "expectancy": -0.005527002194066765,
+      "sharpe": -0.5855301789367289,
+      "sortino": -0.6690901514182903,
+      "max_drawdown": -0.22270995536356386,
+      "profit_factor": 0.7991173975378586,
+      "avg_holding_days": 13.383333333333333,
+      "stability_score": 0.2853793405118802,
+      "total_return": -0.09381142544323662,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T08:30:14.560226",
+      "production": false
+    }
+  ],
+  "experiments": [
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.2_a1.8_r2.0_h15",
+        "sample_count": 15,
+        "win_rate": 0.4666666666666667,
+        "expectancy": 0.009626636446197179,
+        "sharpe": 1.8175109880908404,
+        "sortino": 0.0,
+        "max_drawdown": -0.03111171698956161,
+        "profit_factor": 1.5057867039402988,
+        "avg_holding_days": 9.866666666666667,
+        "stability_score": 0.2520392958691145,
+        "total_return": 0.08548905484322233,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:38.594598"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:38.594786+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.2_a1.8_r2.0_h25",
+        "sample_count": 13,
+        "win_rate": 0.38461538461538464,
+        "expectancy": 0.011597905416678453,
+        "sharpe": 1.451821198532418,
+        "sortino": 0.0,
+        "max_drawdown": -0.039116553956331734,
+        "profit_factor": 1.5927981345643203,
+        "avg_holding_days": 11.76923076923077,
+        "stability_score": 0.22963168110599305,
+        "total_return": 0.06705351217136224,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:39.358870"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:39.359046+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.2_a1.8_r2.5_h15",
+        "sample_count": 14,
+        "win_rate": 0.5,
+        "expectancy": 0.015473882604868332,
+        "sharpe": 1.8715601986178345,
+        "sortino": 0.0,
+        "max_drawdown": -0.03905647481173069,
+        "profit_factor": 1.9212794978725254,
+        "avg_holding_days": 11.214285714285714,
+        "stability_score": 0.21590183550795308,
+        "total_return": 0.08480817699395726,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:40.097169"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:40.097334+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.2_a1.8_r2.5_h25",
+        "sample_count": 12,
+        "win_rate": 0.3333333333333333,
+        "expectancy": 0.01846962719859287,
+        "sharpe": 1.4885281262566155,
+        "sortino": 0.0,
+        "max_drawdown": -0.05105669900678744,
+        "profit_factor": 2.070215684028642,
+        "avg_holding_days": 14.5,
+        "stability_score": 0.2082407025393897,
+        "total_return": 0.07003230217588707,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:40.818299"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:40.818520+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.2_a2.2_r2.0_h15",
+        "sample_count": 13,
+        "win_rate": 0.46153846153846156,
+        "expectancy": 0.010799794598912341,
+        "sharpe": 1.423448300779011,
+        "sortino": 0.0,
+        "max_drawdown": -0.04201419325769773,
+        "profit_factor": 1.5117838550617873,
+        "avg_holding_days": 11.692307692307692,
+        "stability_score": 0.13865004091108815,
+        "total_return": 0.05553364016390461,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:41.585118"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:41.585293+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.2_a2.2_r2.0_h25",
+        "sample_count": 13,
+        "win_rate": 0.3076923076923077,
+        "expectancy": 0.007730651244973642,
+        "sharpe": 0.8379254667431051,
+        "sortino": 0.0,
+        "max_drawdown": -0.06372758970843062,
+        "profit_factor": 1.3153348199802095,
+        "avg_holding_days": 13.846153846153847,
+        "stability_score": 0.11800866604420902,
+        "total_return": 0.03388130396381506,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:42.255578"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:42.255758+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.2_a2.2_r2.5_h15",
+        "sample_count": 13,
+        "win_rate": 0.46153846153846156,
+        "expectancy": 0.008061829887801271,
+        "sharpe": 1.1403336264499175,
+        "sortino": 0.0,
+        "max_drawdown": -0.04201419325769773,
+        "profit_factor": 1.38203637495539,
+        "avg_holding_days": 12.384615384615385,
+        "stability_score": 0.11708079032749928,
+        "total_return": 0.04555816944663915,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:42.975211"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:42.975405+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.2_a2.2_r2.5_h25",
+        "sample_count": 12,
+        "win_rate": 0.25,
+        "expectancy": 0.001450233058985874,
+        "sharpe": 0.2986529269779555,
+        "sortino": 0.0,
+        "max_drawdown": -0.06341460102955665,
+        "profit_factor": 1.0546048907545784,
+        "avg_holding_days": 14.666666666666666,
+        "stability_score": 0.03163575906163887,
+        "total_return": 0.01092058164839571,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:43.682228"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:43.682439+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.4_a1.8_r2.0_h15",
+        "sample_count": 15,
+        "win_rate": 0.4666666666666667,
+        "expectancy": 0.0075367343373876645,
+        "sharpe": 1.663892060765333,
+        "sortino": 0.0,
+        "max_drawdown": -0.033574211143089006,
+        "profit_factor": 1.4431038685500681,
+        "avg_holding_days": 10.266666666666667,
+        "stability_score": 0.23606975128709012,
+        "total_return": 0.07368935728912263,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:44.446287"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:44.446510+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.4_a1.8_r2.0_h25",
+        "sample_count": 13,
+        "win_rate": 0.3076923076923077,
+        "expectancy": 0.003760681092263787,
+        "sharpe": 0.8608088430098012,
+        "sortino": 0.0,
+        "max_drawdown": -0.04458902901544848,
+        "profit_factor": 1.18072944129018,
+        "avg_holding_days": 11.692307692307692,
+        "stability_score": 0.11089943497972261,
+        "total_return": 0.036473001950336315,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:45.238953"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:45.239136+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.4_a1.8_r2.5_h15",
+        "sample_count": 14,
+        "win_rate": 0.5,
+        "expectancy": 0.013234701774000993,
+        "sharpe": 1.7822243860461633,
+        "sortino": 0.0,
+        "max_drawdown": -0.033574211143089006,
+        "profit_factor": 1.9047844316518128,
+        "avg_holding_days": 11.642857142857142,
+        "stability_score": 0.20696418747322287,
+        "total_return": 0.07554730461899695,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:46.013078"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:46.013284+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.4_a1.8_r2.5_h25",
+        "sample_count": 12,
+        "win_rate": 0.25,
+        "expectancy": 0.008193546163868835,
+        "sharpe": 0.7831210724807519,
+        "sortino": 0.0,
+        "max_drawdown": -0.06443364959520603,
+        "profit_factor": 1.4403909973149773,
+        "avg_holding_days": 14.416666666666666,
+        "stability_score": 0.09766528806422833,
+        "total_return": 0.03319904589020273,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:46.743970"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:46.744195+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.4_a2.2_r2.0_h15",
+        "sample_count": 14,
+        "win_rate": 0.42857142857142855,
+        "expectancy": 0.005055194666800584,
+        "sharpe": 1.0368277433219988,
+        "sortino": 0.0,
+        "max_drawdown": -0.049107019033233223,
+        "profit_factor": 1.2507494228425742,
+        "avg_holding_days": 11.642857142857142,
+        "stability_score": 0.12149926923089929,
+        "total_return": 0.0381069363901092,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:47.537148"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:47.537363+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.4_a2.2_r2.0_h25",
+        "sample_count": 12,
+        "win_rate": 0.25,
+        "expectancy": 0.002603633451753963,
+        "sharpe": 0.5287639129316858,
+        "sortino": 0.0,
+        "max_drawdown": -0.06887857651870799,
+        "profit_factor": 1.110325561721675,
+        "avg_holding_days": 15.083333333333334,
+        "stability_score": 0.0323788380353981,
+        "total_return": 0.019427907165304292,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:48.240374"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:48.240605+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.4_a2.2_r2.5_h15",
+        "sample_count": 14,
+        "win_rate": 0.42857142857142855,
+        "expectancy": 0.0025127988636260185,
+        "sharpe": 0.78696300127834,
+        "sortino": 0.0,
+        "max_drawdown": -0.049107019033233223,
+        "profit_factor": 1.124640672872936,
+        "avg_holding_days": 12.285714285714286,
+        "stability_score": 0.09661006518514702,
+        "total_return": 0.029953463353507903,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:48.973968"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:48.974201+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 15,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d15_v1.4_a2.2_r2.5_h25",
+        "sample_count": 11,
+        "win_rate": 0.18181818181818182,
+        "expectancy": -0.00709483061307364,
+        "sharpe": -0.19265315387523077,
+        "sortino": 0.0,
+        "max_drawdown": -0.06887857651870799,
+        "profit_factor": 0.7244186806844225,
+        "avg_holding_days": 16.09090909090909,
+        "stability_score": 0.012555702987236492,
+        "total_return": -0.008362332386823157,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:49.700703"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:49.700939+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.2_a1.8_r2.0_h15",
+        "sample_count": 14,
+        "win_rate": 0.5714285714285714,
+        "expectancy": 0.013739323428093605,
+        "sharpe": 2.1199123472602084,
+        "sortino": 0.0,
+        "max_drawdown": -0.03498041853883316,
+        "profit_factor": 1.8082416239663548,
+        "avg_holding_days": 10.357142857142858,
+        "stability_score": 0.27850181009539116,
+        "total_return": 0.09646686050877284,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:50.463864"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:50.464109+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.2_a1.8_r2.0_h25",
+        "sample_count": 12,
+        "win_rate": 0.4166666666666667,
+        "expectancy": 0.016298143259293393,
+        "sharpe": 1.7094258675780845,
+        "sortino": 0.0,
+        "max_drawdown": -0.039116553956331734,
+        "profit_factor": 1.9423515446240214,
+        "avg_holding_days": 12.166666666666666,
+        "stability_score": 0.2533814160387918,
+        "total_return": 0.07710386672283343,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:51.228341"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:51.228625+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.2_a1.8_r2.5_h15",
+        "sample_count": 14,
+        "win_rate": 0.5714285714285714,
+        "expectancy": 0.010123627462555917,
+        "sharpe": 1.3660175948745998,
+        "sortino": 0.0,
+        "max_drawdown": -0.03498041853883316,
+        "profit_factor": 1.5955414867107411,
+        "avg_holding_days": 11.714285714285714,
+        "stability_score": 0.18856103791368425,
+        "total_return": 0.059480067709667184,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:52.016817"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:52.017059+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.2_a1.8_r2.5_h25",
+        "sample_count": 11,
+        "win_rate": 0.2727272727272727,
+        "expectancy": 0.007308584765762416,
+        "sharpe": 0.7876099929605119,
+        "sortino": 0.0,
+        "max_drawdown": -0.05116407435510639,
+        "profit_factor": 1.38165751731647,
+        "avg_holding_days": 14.727272727272727,
+        "stability_score": 0.17615091852613868,
+        "total_return": 0.0349607687930471,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:52.751255"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:52.751511+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.2_a2.2_r2.0_h15",
+        "sample_count": 12,
+        "win_rate": 0.5,
+        "expectancy": 0.008508752239471585,
+        "sharpe": 1.1345842366800796,
+        "sortino": 0.0,
+        "max_drawdown": -0.03249417219780759,
+        "profit_factor": 1.4233507730383246,
+        "avg_holding_days": 12.833333333333334,
+        "stability_score": 0.12402056289326197,
+        "total_return": 0.04180808219720977,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:53.506766"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:53.507016+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.2_a2.2_r2.0_h25",
+        "sample_count": 11,
+        "win_rate": 0.2727272727272727,
+        "expectancy": -8.957509902238329e-05,
+        "sharpe": 0.42802069902617734,
+        "sortino": 0.0,
+        "max_drawdown": -0.05421269381283789,
+        "profit_factor": 0.9965494674871554,
+        "avg_holding_days": 15.181818181818182,
+        "stability_score": 0.07708198635388626,
+        "total_return": 0.0158307331797376,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:54.186265"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:54.186539+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.2_a2.2_r2.5_h15",
+        "sample_count": 12,
+        "win_rate": 0.5,
+        "expectancy": 0.010164685893266944,
+        "sharpe": 1.0623927361828056,
+        "sortino": 0.0,
+        "max_drawdown": -0.03249417219780759,
+        "profit_factor": 1.5057413248729823,
+        "avg_holding_days": 12.916666666666666,
+        "stability_score": 0.1375986062309302,
+        "total_return": 0.038352620641452395,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:54.960028"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:54.960277+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.2_a2.2_r2.5_h25",
+        "sample_count": 11,
+        "win_rate": 0.2727272727272727,
+        "expectancy": 0.004595372794799621,
+        "sharpe": 0.4076954123161261,
+        "sortino": 0.0,
+        "max_drawdown": -0.05394643614496886,
+        "profit_factor": 1.177018874778301,
+        "avg_holding_days": 15.454545454545455,
+        "stability_score": 0.1327668837483595,
+        "total_return": 0.015117029913521485,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:55.636668"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:55.636954+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.4_a1.8_r2.0_h15",
+        "sample_count": 13,
+        "win_rate": 0.5384615384615384,
+        "expectancy": 0.01217484560269307,
+        "sharpe": 1.880130464904094,
+        "sortino": 0.0,
+        "max_drawdown": -0.033574211143089006,
+        "profit_factor": 1.7612254206025806,
+        "avg_holding_days": 10.461538461538462,
+        "stability_score": 0.1778546318735614,
+        "total_return": 0.08575903061514567,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:56.436957"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:56.437246+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.4_a1.8_r2.0_h25",
+        "sample_count": 10,
+        "win_rate": 0.4,
+        "expectancy": 0.01553285283659816,
+        "sharpe": 1.5794390475388245,
+        "sortino": 0.0,
+        "max_drawdown": -0.04330728526960492,
+        "profit_factor": 1.9583733632602427,
+        "avg_holding_days": 14.3,
+        "stability_score": 0.21007331852675387,
+        "total_return": 0.06689487567062691,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:57.239983"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:57.240255+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.4_a1.8_r2.5_h15",
+        "sample_count": 13,
+        "win_rate": 0.5384615384615384,
+        "expectancy": 0.008281019178267866,
+        "sharpe": 1.1342741686830886,
+        "sortino": 0.0,
+        "max_drawdown": -0.033574211143089006,
+        "profit_factor": 1.5177660984547197,
+        "avg_holding_days": 11.923076923076923,
+        "stability_score": 0.1513426208705242,
+        "total_return": 0.04887886251788798,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:58.047074"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:58.047356+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.4_a1.8_r2.5_h25",
+        "sample_count": 9,
+        "win_rate": 0.2222222222222222,
+        "expectancy": 0.002079576164283289,
+        "sharpe": 0.5063625602481743,
+        "sortino": 0.0,
+        "max_drawdown": -0.04587160694611092,
+        "profit_factor": 1.1133088819666876,
+        "avg_holding_days": 17.666666666666668,
+        "stability_score": 0.032918189312300915,
+        "total_return": 0.020205700875502552,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:58.846242"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:58.846525+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.4_a2.2_r2.0_h15",
+        "sample_count": 12,
+        "win_rate": 0.5,
+        "expectancy": 0.005860422181486189,
+        "sharpe": 1.0119477970924653,
+        "sortino": 0.0,
+        "max_drawdown": -0.038586299546152225,
+        "profit_factor": 1.3328936220041157,
+        "avg_holding_days": 13.416666666666666,
+        "stability_score": 0.09830764852631019,
+        "total_return": 0.03548070270449921,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:28:59.595346"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:28:59.595644+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.4_a2.2_r2.0_h25",
+        "sample_count": 9,
+        "win_rate": 0.2222222222222222,
+        "expectancy": -0.003599505233114273,
+        "sharpe": 0.32758494112539654,
+        "sortino": 0.0,
+        "max_drawdown": -0.05034739445624181,
+        "profit_factor": 0.84733745441976,
+        "avg_holding_days": 18.22222222222222,
+        "stability_score": 0.05159331624064483,
+        "total_return": 0.011026945605360883,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:00.322456"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:00.322773+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.4_a2.2_r2.5_h15",
+        "sample_count": 12,
+        "win_rate": 0.5,
+        "expectancy": 0.0075163558352815485,
+        "sharpe": 0.9432389640659348,
+        "sortino": 0.0,
+        "max_drawdown": -0.038586299546152225,
+        "profit_factor": 1.4269567687773828,
+        "avg_holding_days": 13.5,
+        "stability_score": 0.11506969637138267,
+        "total_return": 0.03242724127081198,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:01.110817"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:01.111108+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 20,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d20_v1.4_a2.2_r2.5_h25",
+        "sample_count": 9,
+        "win_rate": 0.2222222222222222,
+        "expectancy": -0.0007835765504463524,
+        "sharpe": 0.1728738044369674,
+        "sortino": 0.0,
+        "max_drawdown": -0.05034739445624181,
+        "profit_factor": 0.9667668795845517,
+        "avg_holding_days": 18.555555555555557,
+        "stability_score": 0.010987925117002825,
+        "total_return": 0.005193801726857572,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:01.802703"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:01.803012+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.2_a1.8_r2.0_h15",
+        "sample_count": 14,
+        "win_rate": 0.5,
+        "expectancy": 0.005644803018936335,
+        "sharpe": 1.3708395288502189,
+        "sortino": 0.0,
+        "max_drawdown": -0.03498041853883316,
+        "profit_factor": 1.2760519806941804,
+        "avg_holding_days": 9.714285714285714,
+        "stability_score": 0.2267659283276798,
+        "total_return": 0.058110503711162664,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:02.567504"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:02.567828+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.2_a1.8_r2.0_h25",
+        "sample_count": 12,
+        "win_rate": 0.3333333333333333,
+        "expectancy": 0.006854536115276577,
+        "sharpe": 1.0583969965234432,
+        "sortino": 0.0,
+        "max_drawdown": -0.039116553956331734,
+        "profit_factor": 1.321516795918604,
+        "avg_holding_days": 11.416666666666666,
+        "stability_score": 0.21141506750147585,
+        "total_return": 0.04476758393507185,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:03.320464"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:03.320792+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.2_a1.8_r2.5_h15",
+        "sample_count": 14,
+        "win_rate": 0.5,
+        "expectancy": 0.0008678029325551451,
+        "sharpe": 0.9599082502856545,
+        "sortino": 0.0,
+        "max_drawdown": -0.0353213505186033,
+        "profit_factor": 1.0424388092162706,
+        "avg_holding_days": 11.0,
+        "stability_score": 0.06460349469260193,
+        "total_return": 0.04198956565891976,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:04.075659"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:04.075995+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.2,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.2_a1.8_r2.5_h25",
+        "sample_count": 11,
+        "win_rate": 0.18181818181818182,
+        "expectancy": -0.0044715555451476565,
+        "sharpe": 0.2082495942958994,
+        "sortino": 0.0,
+        "max_drawdown": -0.05386344663945586,
+        "profit_factor": 0.8100412433953292,
+        "avg_holding_days": 13.818181818181818,
+        "stability_score": 0.10464152208773646,
+        "total_return": 0.00802573439372245,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:04.849033"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:04.849412+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.2_a2.2_r2.0_h15",
+        "sample_count": 12,
+        "win_rate": 0.4166666666666667,
+        "expectancy": -0.003033434269882271,
+        "sharpe": 0.5017887308275738,
+        "sortino": 0.0,
+        "max_drawdown": -0.035032464924454554,
+        "profit_factor": 0.8787452698742954,
+        "avg_holding_days": 12.083333333333334,
+        "stability_score": 0.07110985670376851,
+        "total_return": 0.01780790584303915,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:05.552832"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:05.553148+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.2_a2.2_r2.0_h25",
+        "sample_count": 11,
+        "win_rate": 0.18181818181818182,
+        "expectancy": -0.012681051291044772,
+        "sharpe": -0.3588096176594887,
+        "sortino": 0.0,
+        "max_drawdown": -0.0571538832005587,
+        "profit_factor": 0.5951827619163222,
+        "avg_holding_days": 14.363636363636363,
+        "stability_score": 0.25725087722761175,
+        "total_return": -0.015540471014989565,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:06.238952"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:06.239341+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.2_a2.2_r2.5_h15",
+        "sample_count": 12,
+        "win_rate": 0.4166666666666667,
+        "expectancy": -0.003033434269882271,
+        "sharpe": 0.5017887308275738,
+        "sortino": 0.0,
+        "max_drawdown": -0.035032464924454554,
+        "profit_factor": 0.8787452698742954,
+        "avg_holding_days": 12.083333333333334,
+        "stability_score": 0.07110985670376851,
+        "total_return": 0.01780790584303915,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:06.993146"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:06.993490+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.2,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.2_a2.2_r2.5_h25",
+        "sample_count": 11,
+        "win_rate": 0.18181818181818182,
+        "expectancy": -0.009802576474090432,
+        "sharpe": -0.17319566921550292,
+        "sortino": 0.0,
+        "max_drawdown": -0.05750229899827419,
+        "profit_factor": 0.6870723220599491,
+        "avg_holding_days": 14.545454545454545,
+        "stability_score": 0.2040817669819204,
+        "total_return": -0.008545674386844948,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:07.661345"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:07.661698+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.4_a1.8_r2.0_h15",
+        "sample_count": 13,
+        "win_rate": 0.46153846153846156,
+        "expectancy": 0.0033823718557325676,
+        "sharpe": 1.235911777502161,
+        "sortino": 0.0,
+        "max_drawdown": -0.033574211143089006,
+        "profit_factor": 1.170967794446718,
+        "avg_holding_days": 9.692307692307692,
+        "stability_score": 0.09336171527100649,
+        "total_return": 0.04902996724833941,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:08.462484"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:08.462825+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.4_a1.8_r2.0_h25",
+        "sample_count": 10,
+        "win_rate": 0.3,
+        "expectancy": 0.004102636965549509,
+        "sharpe": 0.9454714588450372,
+        "sortino": 0.0,
+        "max_drawdown": -0.04330728526960492,
+        "profit_factor": 1.1941210126306487,
+        "avg_holding_days": 13.3,
+        "stability_score": 0.14032894674067992,
+        "total_return": 0.034482799608507975,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:09.251655"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:09.251996+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.4_a1.8_r2.5_h15",
+        "sample_count": 13,
+        "win_rate": 0.46153846153846156,
+        "expectancy": -0.0017620897757548671,
+        "sharpe": 0.8043558769793296,
+        "sortino": 0.0,
+        "max_drawdown": -0.033574211143089006,
+        "profit_factor": 0.9109321460124695,
+        "avg_holding_days": 11.076923076923077,
+        "stability_score": 0.04760066792526997,
+        "total_return": 0.03256152849655014,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:10.058361"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:10.058766+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.4,
+        "atr_mult": 1.8,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.4_a1.8_r2.5_h25",
+        "sample_count": 9,
+        "win_rate": 0.1111111111111111,
+        "expectancy": -0.012427136769305104,
+        "sharpe": -0.16730401573439938,
+        "sortino": 0.0,
+        "max_drawdown": -0.04839717979976299,
+        "profit_factor": 0.4784542121211689,
+        "avg_holding_days": 16.444444444444443,
+        "stability_score": 0.24866787932824347,
+        "total_return": -0.008076625211264954,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:10.843298"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:10.843649+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.4_a2.2_r2.0_h15",
+        "sample_count": 12,
+        "win_rate": 0.4166666666666667,
+        "expectancy": -0.0057814643538411205,
+        "sharpe": 0.3953892031595439,
+        "sortino": 0.0,
+        "max_drawdown": -0.038586299546152225,
+        "profit_factor": 0.7444390194377551,
+        "avg_holding_days": 12.583333333333334,
+        "stability_score": 0.16042789224469847,
+        "total_return": 0.012165762136373548,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:11.580983"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:11.581345+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.0,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.4_a2.2_r2.0_h25",
+        "sample_count": 9,
+        "win_rate": 0.1111111111111111,
+        "expectancy": -0.019122020613550686,
+        "sharpe": -0.5876505537804398,
+        "sortino": 0.0,
+        "max_drawdown": -0.05391689808088662,
+        "profit_factor": 0.36826494223620837,
+        "avg_holding_days": 17.11111111111111,
+        "stability_score": 0.3086330825149892,
+        "total_return": -0.020947990079952294,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:12.291989"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:12.292370+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 15
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.4_a2.2_r2.5_h15",
+        "sample_count": 12,
+        "win_rate": 0.4166666666666667,
+        "expectancy": -0.0057814643538411205,
+        "sharpe": 0.3953892031595439,
+        "sortino": 0.0,
+        "max_drawdown": -0.038586299546152225,
+        "profit_factor": 0.7444390194377551,
+        "avg_holding_days": 12.583333333333334,
+        "stability_score": 0.16042789224469847,
+        "total_return": 0.012165762136373548,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:13.074957"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:13.075344+00:00"
+    },
+    {
+      "name": "breakout_param_search",
+      "params": {
+        "donchian": 25,
+        "vol_surge": 1.4,
+        "atr_mult": 2.2,
+        "rr": 2.5,
+        "max_hold": 25
+      },
+      "result": {
+        "strategy_id": "breakout_param_search",
+        "version": "d25_v1.4_a2.2_r2.5_h25",
+        "sample_count": 9,
+        "win_rate": 0.1111111111111111,
+        "expectancy": -0.018514003469276577,
+        "sharpe": -0.5075468720044356,
+        "sortino": 0.0,
+        "max_drawdown": -0.05391689808088662,
+        "profit_factor": 0.38835203206431923,
+        "avg_holding_days": 17.333333333333332,
+        "stability_score": 0.2975634223629839,
+        "total_return": -0.018312667641955827,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T08:29:13.757865"
+      },
+      "success": false,
+      "created_at": "2026-11-13T08:29:13.758239+00:00"
+    }
+  ]
+}
