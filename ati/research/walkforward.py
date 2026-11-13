@@ -73,6 +73,8 @@ def run_rolling_walkforward(
     rebalance_every: int = 42,
     nifty_sma_gate: int = 200,
     vix_cash_threshold: float | None = 18.0,
+    min_breadth: float | None = 0.40,
+    max_portfolio_dd: float | None = -0.20,
     registry: StrategyRegistry | None = None,
 ) -> WalkForwardReport:
     """Expanding/rolling OOS folds on the gated dual-momentum book."""
@@ -168,6 +170,8 @@ def run_rolling_walkforward(
             trade_start=test_start,
             india_vix=vix_test,
             vix_cash_threshold=vix_cash_threshold,
+            min_breadth=min_breadth,
+            max_portfolio_dd=max_portfolio_dd,
         )
         bench = run_nifty_buyhold_benchmark(nifty_bench)
         fold_results.append(
@@ -265,6 +269,8 @@ def run_rolling_walkforward(
             "top_n": top_n,
             "nifty_sma_gate": nifty_sma_gate,
             "vix_cash_threshold": vix_cash_threshold,
+            "min_breadth": min_breadth,
+            "max_portfolio_dd": max_portfolio_dd,
         },
         result={
             "metrics": metrics.model_dump(mode="json"),

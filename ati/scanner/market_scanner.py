@@ -86,15 +86,18 @@ class MarketScanner:
         india_vix = self.provider.india_vix()
         from ati.research.gates import india_vix_elevated
 
-        risk_on = nifty_above_sma(nifty, window=self.config.nifty_trend_sma)
-        if india_vix_elevated(india_vix, threshold=18.0):
-            risk_on = False
+        nifty_on = nifty_above_sma(nifty, window=self.config.nifty_trend_sma)
+        vix_off = india_vix_elevated(india_vix, threshold=18.0)
+        # regime.breadth is in [-1,1]; convert to positive-share proxy in [0,1]
+        breadth_share = (regime.breadth + 1.0) / 2.0
+        risk_on = nifty_on and not vix_off and breadth_share >= 0.40
 
         if progress:
-            gate = "ON" if risk_on else "OFF→cash bias"
             progress(
                 f"Regime={regime.regime.value} conf={regime.confidence:.2f} "
-                f"NIFTY>SMA{self.config.nifty_trend_sma}={gate} — scanning {len(filtered)} names"
+                f"risk_on={'ON' if risk_on else 'OFF'} "
+                f"(nifty={nifty_on}, vix_ok={not vix_off}, breadth={breadth_share:.2f}) "
+                f"— scanning {len(filtered)} names"
             )
 
         opportunities: list[Opportunity] = []
@@ -246,11 +249,10 @@ class MarketScanner:
         ranked = rank_opportunities(opportunities)
         # Keep actionable + high-quality WAIT; drop NO_TRADE clutter unless debugging
         ranked = [o for o in ranked if o.signal.value in ("BUY", "WAIT", "SHORT")]
-        vix_off = india_vix_elevated(india_vix, threshold=18.0)
         gate_note = (
-            f"NIFTY>SMA{self.config.nifty_trend_sma}="
-            f"{'ON' if nifty_above_sma(nifty, window=self.config.nifty_trend_sma) else 'OFF'}; "
-            f"VIX<18={'OFF' if vix_off else 'ON'}; risk_on={'ON' if risk_on else 'OFF'}"
+            f"NIFTY>SMA{self.config.nifty_trend_sma}={'ON' if nifty_on else 'OFF'}; "
+            f"VIX<18={'OFF' if vix_off else 'ON'}; "
+            f"breadth={breadth_share:.2f}; risk_on={'ON' if risk_on else 'OFF'}"
         )
         result = ScanResult(
             regime_notes=f"{regime.notes}; {gate_note}",

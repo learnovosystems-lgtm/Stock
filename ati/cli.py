@@ -17,6 +17,8 @@ from ati.ml.train import train_from_frames
 from ati.models.opportunity import StrategyMetrics
 from ati.ops.session import _default_broker, is_market_open, run_eod, run_intrasession_once
 from ati.paper.portfolio import PaperBroker
+from ati.research.adaptive import run_mean_reversion_baseline, run_regime_adaptive_book
+from ati.research.adaptive_walkforward import run_adaptive_walkforward
 from ati.research.backtest import (
     run_breakout_momentum_baseline,
     run_dual_momentum_baseline,
@@ -105,10 +107,10 @@ def backtest_baseline(
     limit: int = typer.Option(0, help="Symbols to include (0=full universe)"),
     strategy: str = typer.Option(
         "all",
-        help="breakout|pullback|dual|dual-gated|benchmark|all",
+        help="breakout|pullback|dual|dual-gated|mean-rev|adaptive|benchmark|all",
     ),
 ):
-    """Measure baselines and record metrics (honest, including losses)."""
+    """Measure baselines / adaptive multi-book and record metrics (honest, including losses)."""
     ensure_dirs()
     provider = MarketDataProvider()
     uni = load_universe()
@@ -182,8 +184,31 @@ def backtest_baseline(
                 strategy_id="dual_momentum_nifty_gated",
                 india_vix=vix,
                 vix_cash_threshold=18.0,
+                min_breadth=0.40,
+                max_portfolio_dd=-0.20,
             ),
-            version="2.1.0-sma200-vix18",
+            version="2.2.0-breadth-ddkill",
+        )
+    if strategy in ("mean-rev", "all"):
+        _record(run_mean_reversion_baseline(frames), version="1.0.0-rsi35-rb10")
+    if strategy in ("adaptive", "all"):
+        vix = provider.india_vix()
+        result, diag = run_regime_adaptive_book(
+            frames,
+            nifty,
+            sectors=sectors,
+            india_vix=vix,
+            vix_cash_threshold=18.0,
+            min_breadth=0.40,
+            max_portfolio_dd=-0.20,
+        )
+        _record(result, version="1.0.0-regime-switch")
+        console.print_json(
+            data={
+                "adaptive_regime_days": diag.regime_counts,
+                "adaptive_book_rebalances": diag.book_counts,
+                "adaptive_switches": diag.switches,
+            }
         )
     if strategy in ("benchmark", "all"):
         _record(run_nifty_buyhold_benchmark(nifty), version="1.0.0")
@@ -251,8 +276,12 @@ def train_ml(limit: int = typer.Option(40, help="Symbols for training")):
 def walkforward(
     limit: int = typer.Option(0, help="Symbols (0=full universe)"),
     folds: int = typer.Option(4, help="Number of OOS folds"),
+    mode: str = typer.Option(
+        "adaptive",
+        help="dual = single gated dual-mom | adaptive = regime multi-book switch",
+    ),
 ):
-    """Rolling walk-forward for NIFTY-gated dual momentum; may promote if gates clear."""
+    """Rolling walk-forward; default is regime-adaptive multi-strategy auto-switch."""
     ensure_dirs()
     provider = MarketDataProvider()
     uni = load_universe()
@@ -263,10 +292,31 @@ def walkforward(
     nifty = provider.nifty()
     sectors = {i.symbol: i.sector for i in uni}
     vix = provider.india_vix()
-    report = run_rolling_walkforward(
-        frames, nifty, sectors, india_vix=vix, n_folds=folds, vix_cash_threshold=18.0
-    )
-    table = Table(title="Rolling walk-forward OOS folds")
+    if mode == "dual":
+        report = run_rolling_walkforward(
+            frames,
+            nifty,
+            sectors,
+            india_vix=vix,
+            n_folds=folds,
+            vix_cash_threshold=18.0,
+            min_breadth=0.40,
+            max_portfolio_dd=-0.20,
+        )
+        title = "Walk-forward OOS — dual-momentum gated"
+    else:
+        report = run_adaptive_walkforward(
+            frames,
+            nifty,
+            sectors,
+            india_vix=vix,
+            n_folds=folds,
+            vix_cash_threshold=18.0,
+            min_breadth=0.40,
+            max_portfolio_dd=-0.20,
+        )
+        title = "Walk-forward OOS — regime-adaptive multi-book"
+    table = Table(title=title)
     table.add_column("fold")
     table.add_column("test")
     table.add_column("trades")
@@ -274,7 +324,12 @@ def walkforward(
     table.add_column("bh_sharpe")
     table.add_column("ret")
     table.add_column("beats_bh")
+    table.add_column("books")
     for f in report.folds:
+        books = ""
+        diag = getattr(f, "diagnostics", None)
+        if diag is not None:
+            books = ",".join(f"{k}:{v}" for k, v in sorted(diag.book_counts.items()))
         table.add_row(
             str(f.fold),
             f"{f.test_start}→{f.test_end}",
@@ -283,10 +338,13 @@ def walkforward(
             f"{f.benchmark.sharpe:.3f}",
             f"{f.strategy.total_return:.3f}",
             "yes" if f.beats_benchmark_sharpe else "no",
+            books or "—",
         )
     console.print(table)
     console.print_json(
         data={
+            "mode": mode,
+            "strategy_id": report.strategy_id,
             "oos_sharpe_mean": round(report.oos_sharpe_mean, 4),
             "oos_sharpe_std": round(report.oos_sharpe_std, 4),
             "oos_return_mean": round(report.oos_return_mean, 4),

@@ -53,3 +53,37 @@ def sector_neutral_scores(
         sym: score - medians.get(sectors.get(sym, "UNKNOWN"), 0.0)
         for sym, score in raw_scores.items()
     }
+
+
+def universe_breadth(
+    panel: pd.DataFrame,
+    i: int,
+    lookback: int,
+) -> float:
+    """Share of names with positive lookback return at bar i. Returns 0..1."""
+    if i < lookback or panel.empty:
+        return 0.0
+    ups = 0
+    total = 0
+    row_now = panel.iloc[i]
+    row_past = panel.iloc[i - lookback]
+    for sym in panel.columns:
+        now = row_now[sym]
+        past = row_past[sym]
+        if pd.isna(now) or pd.isna(past) or past <= 0:
+            continue
+        total += 1
+        if float(now / past - 1.0) > 0:
+            ups += 1
+    return ups / total if total else 0.0
+
+
+def drawdown_from_peak(equity_curve: list[float], peak: float) -> tuple[float, float]:
+    """Return (current_drawdown, updated_peak). Drawdown <= 0."""
+    if not equity_curve:
+        return 0.0, peak
+    eq = float(equity_curve[-1])
+    peak = max(peak, eq)
+    if peak <= 0:
+        return 0.0, peak
+    return eq / peak - 1.0, peak
