@@ -43,6 +43,8 @@ def _synthetic_frames(n: int = 400, n_syms: int = 8) -> tuple[dict[str, pd.DataF
 def test_book_for_regime_mapping():
     assert book_for_regime(MarketRegime.BULL) == "dual_momentum"
     assert book_for_regime(MarketRegime.SIDEWAYS) == "mean_reversion"
+    assert book_for_regime(MarketRegime.SIDEWAYS, nifty_above_trend=True) == "mean_reversion"
+    assert book_for_regime(MarketRegime.SIDEWAYS, nifty_above_trend=False) == "cash"
     assert book_for_regime(MarketRegime.BEAR) == "cash"
     assert book_for_regime(MarketRegime.HIGH_VOL) == "cash"
     assert book_for_regime(MarketRegime.UNCERTAIN) == "cash"
