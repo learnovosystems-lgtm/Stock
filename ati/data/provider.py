@@ -65,7 +65,9 @@ class MarketDataProvider:
                 # Refresh if last bar older than 1 trading day for daily+
                 age_hours = (datetime.now(timezone.utc).replace(tzinfo=None) - cached.index.max()).total_seconds() / 3600
                 max_age = 6 if interval.endswith("m") or interval.endswith("h") else 30
-                if age_hours < max_age:
+                # Also refresh if cache is too short for the configured research window
+                min_bars = 400 if interval in ("1d", "1wk", "1w") else 20
+                if age_hours < max_age and len(cached) >= min_bars:
                     return cached
 
         kwargs: dict = {
@@ -109,8 +111,9 @@ class MarketDataProvider:
         if interval in ("15m", "30m", "60m", "1h", "90m"):
             return f"{self.config.lookback_days_intraday}d"
         if interval in ("1wk", "1w"):
-            return "5y"
-        return "2y"
+            return "10y"
+        # Expanded research window (Phase-2 measurement)
+        return "5y"
 
     def get_daily(self, symbol: str, force: bool = False) -> pd.DataFrame:
         return self.download(symbol, self.config.market.daily_interval, force=force)

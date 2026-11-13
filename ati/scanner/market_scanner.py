@@ -20,6 +20,7 @@ from ati.engine.selection import StrategySelector
 from ati.ml.inference import SignalModel
 from ati.models.opportunity import Opportunity, StrategyMetrics
 from ati.regime.detector import RegimeDetector, sector_relative_returns
+from ati.research.gates import nifty_above_sma
 from ati.strategies.base import StrategyContext
 from ati.strategies.common import is_overextended, prepare_daily, rs_vs_nifty, weekly_bias
 from ati.strategies.registry import all_strategies
@@ -82,12 +83,28 @@ class MarketScanner:
         sector_rets = sector_relative_returns(self.provider, SECTOR_INDEX)
         regime = self.regime_detector.detect(daily_map, sector_rets)
         nifty = self.provider.nifty()
+        risk_on = nifty_above_sma(nifty, window=self.config.nifty_trend_sma)
 
         if progress:
-            progress(f"Regime={regime.regime.value} conf={regime.confidence:.2f} — scanning {len(filtered)} names")
+            gate = "ON" if risk_on else "OFF→cash bias"
+            progress(
+                f"Regime={regime.regime.value} conf={regime.confidence:.2f} "
+                f"NIFTY>SMA{self.config.nifty_trend_sma}={gate} — scanning {len(filtered)} names"
+            )
 
         opportunities: list[Opportunity] = []
         state = PortfolioRiskState(equity=equity, cash=cash, open_risk_rupees=0.0, open_positions=0, day_pnl=0.0)
+
+        # When index trend gate is off, still allow mean-reversion/reversal families only
+        gated_off_families = {
+            "momentum",
+            "relative_strength",
+            "trend_following",
+            "breakout",
+            "pullback",
+            "multi_factor",
+            "volatility_expansion",
+        }
 
         for inst in filtered:
             daily = prepare_daily(daily_map[inst.symbol])
@@ -114,6 +131,8 @@ class MarketScanner:
             for strat in self.strategies:
                 if regime.regime not in strat.suitable_regimes():
                     continue
+                if not risk_on and strat.family in gated_off_families:
+                    continue
                 try:
                     sig = strat.generate(ctx)
                 except Exception:  # noqa: BLE001
@@ -135,6 +154,8 @@ class MarketScanner:
             refined = []
             for strat in self.strategies:
                 if regime.regime not in strat.suitable_regimes():
+                    continue
+                if not risk_on and strat.family in gated_off_families:
                     continue
                 try:
                     sig = strat.generate(ctx)
@@ -219,8 +240,11 @@ class MarketScanner:
         ranked = rank_opportunities(opportunities)
         # Keep actionable + high-quality WAIT; drop NO_TRADE clutter unless debugging
         ranked = [o for o in ranked if o.signal.value in ("BUY", "WAIT", "SHORT")]
+        gate_note = (
+            f"NIFTY>SMA{self.config.nifty_trend_sma}={'ON' if risk_on else 'OFF (cash bias)'}"
+        )
         result = ScanResult(
-            regime_notes=regime.notes,
+            regime_notes=f"{regime.notes}; {gate_note}",
             regime=regime.regime.value,
             opportunities=ranked,
             scanned=len(filtered),

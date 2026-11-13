@@ -52,12 +52,14 @@ class MarketConfig:
 class AppConfig:
     risk: RiskConfig = field(default_factory=RiskConfig)
     market: MarketConfig = field(default_factory=MarketConfig)
-    lookback_days_daily: int = 420
+    lookback_days_daily: int = 1300  # ~5y trading days for expanded research
     lookback_days_intraday: int = 10
-    min_avg_volume: float = 200_000.0
+    min_avg_volume: float = 150_000.0
     min_price: float = 50.0
     max_price: float = 50_000.0
     production_strategy_flag: str = "production"
+    # Require NIFTY above this SMA before new risk-on entries
+    nifty_trend_sma: int = 200
 
 
 DEFAULT = AppConfig()

@@ -1,4 +1,4 @@
-"""Dual-momentum swing signal — absolute + relative strength, low-chase entries."""
+"""Dual-momentum swing signal — absolute + relative strength, NIFTY-gated."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Optional
 import pandas as pd
 
 from ati.models.opportunity import MarketRegime
+from ati.research.gates import nifty_above_sma
 from ati.strategies.base import RawSignal, Strategy, StrategyContext
 from ati.strategies.common import (
     atr_stop_long,
@@ -20,27 +21,30 @@ from ati.strategies.common import (
 
 
 class DualMomentumStrategy(Strategy):
-    id = "dual_momentum_v1"
+    id = "dual_momentum_v2"
     family = "relative_strength"
-    version = "1.1.0"
+    version = "2.0.0"
 
     def suitable_regimes(self) -> set[MarketRegime]:
-        return {MarketRegime.BULL, MarketRegime.SIDEWAYS, MarketRegime.HIGH_VOL}
+        return {MarketRegime.BULL, MarketRegime.SIDEWAYS}
 
     def generate(self, ctx: StrategyContext) -> Optional[RawSignal]:
         d = prepare_daily(ctx.daily)
         if len(d) < 140:
             return None
+        # Hard index trend gate — do not take new risk when NIFTY < SMA200
+        if not nifty_above_sma(ctx.nifty_daily, window=200):
+            return None
+
         last = d.iloc[-1]
         if any(pd.isna(last[c]) for c in ("ret_63", "atr_14", "sma_50", "sma_200")):
             return None
 
-        # Absolute momentum (~6m)
-        abs_mom = float(last["Close"] / d["Close"].iloc[-127] - 1.0) if len(d) >= 127 else float(last["ret_63"])
+        abs_mom = float(last["Close"] / d["Close"].iloc[-85] - 1.0) if len(d) >= 85 else float(last["ret_63"])
         if abs_mom <= 0:
             return None
 
-        rs = rs_vs_nifty(d, ctx.nifty_daily, 126) if len(d) >= 130 else rs_vs_nifty(d, ctx.nifty_daily, 63)
+        rs = rs_vs_nifty(d, ctx.nifty_daily, 84)
         if rs < 0.02:
             return None
         if weekly_bias(ctx.weekly) < 0:
@@ -50,21 +54,29 @@ class DualMomentumStrategy(Strategy):
         if is_overextended(d):
             return None
 
-        # Prefer pullback-quality entry inside the RS trend (cost-aware)
-        near_value = float(last["Close"]) <= float(last["sma_20"]) * 1.03 if not pd.isna(last.get("sma_20")) else True
+        near_value = (
+            float(last["Close"]) <= float(last["sma_20"]) * 1.03
+            if not pd.isna(last.get("sma_20"))
+            else True
+        )
         if not near_value and float(last.get("rsi_14", 50) or 50) > 65:
             return None
 
-        stop = atr_stop_long(d, 2.4)
         entry = float(last["Close"])
+        stop = atr_stop_long(d, 2.4)
+        # Enforce minimum stop distance so risk sizing stays meaningful (~1.5%)
+        min_stop = entry * 0.985
+        stop = min(stop, min_stop)
+        if entry - stop <= 0 or (entry - stop) / entry < 0.01:
+            stop = entry * 0.975
         if entry - stop <= 0:
             return None
         t1, t2, t3 = long_targets(entry, stop, float(last["atr_14"]))
         conf = lower_tf_confirmation(ctx.hourly, ctx.m15, "LONG")
         score = (
-            0.35 * min(abs_mom / 0.25, 1.4)
-            + 0.35 * min(max(rs, 0) / 0.15, 1.4)
-            + 0.15 * (1.0 if last["sma_50"] > last["sma_200"] else 0.5)
+            0.30 * min(abs_mom / 0.20, 1.4)
+            + 0.35 * min(max(rs, 0) / 0.12, 1.4)
+            + 0.20 * (1.0 if last["sma_50"] > last["sma_200"] else 0.4)
             + 0.15 * conf
         )
 
@@ -83,17 +95,17 @@ class DualMomentumStrategy(Strategy):
             breakout_confirmation=float(d["High"].iloc[-20:].max()),
             max_entry=entry * 1.012,
             invalidation=stop,
-            holding_period="15-45 trading days",
+            holding_period="21-63 trading days",
             entry_justification=(
-                f"Dual momentum: abs 6m {abs_mom:.1%}, RS vs NIFTY {rs:.1%}, "
-                f"SMA50 filter, non-chase entry"
+                f"NIFTY>SMA200 gate ON; dual mom abs~84d {abs_mom:.1%}, RS {rs:.1%}, "
+                f"non-chase entry"
             ),
-            exit_justification="Wider ATR trail; time box 45d; exit if absolute momentum flips negative",
-            invalidation_condition=f"Stop {stop:.2f} or absolute momentum <= 0 on weekly close",
+            exit_justification="ATR trail; exit if NIFTY loses SMA200 or absolute momentum flips",
+            invalidation_condition=f"Stop {stop:.2f}; or NIFTY closes below SMA200",
             why_good=(
-                "Absolute+relative momentum with lower turnover historically survives Indian "
-                "transaction costs better than daily breakout chasing."
+                "Index trend gate plus absolute/relative momentum aims to stay in cash "
+                "during broad bear phases that previously destroyed active books."
             ),
-            what_could_go_wrong="Momentum crashes / factor reversals; cash gate may miss sharp bottoms.",
-            tags={"abs_mom": abs_mom, "rs_nifty": rs, "ltf_conf": conf},
+            what_could_go_wrong="Whipsaw around SMA200; late re-entry after sharp bottoms.",
+            tags={"abs_mom": abs_mom, "rs_nifty": rs, "ltf_conf": conf, "nifty_sma_gate": True},
         )

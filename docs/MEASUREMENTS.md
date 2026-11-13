@@ -2,70 +2,45 @@
 
 All figures use real Yahoo NSE OHLCV, ₹ costs/slippage model, ₹1,00,000 paper capital, 1% risk/trade, max 3 positions.
 
-## 2026-11-13 — Phase 0 baselines (≈2y daily, ~35 liquid names)
+## 2026-11-13 — Phase 0 baselines (~2y, ~35 names)
 
-### Breakout momentum (tightened filters)
+Daily breakout / pullback: **negative expectancy after costs — not promoted.**
 
-| Metric | Value |
-|--------|-------|
-| Trades | 37–42 |
-| Win rate | ~40–43% |
-| Expectancy | ≈ −0.5%/trade |
-| Sharpe | ≈ −0.42 to −0.46 |
-| Max DD | ≈ −12% |
-| Decision | **Not promoted** |
+## 2026-11-13 — Phase 1 (post #1)
 
-### Pullback trend
+Dual-momentum 84/42 on small sample: mild positive / unstable — research default only.  
+NIFTY buy-hold still ahead on that window.
 
-| Metric | Value |
-|--------|-------|
-| Trades | ~57–60 |
-| Sharpe | ≈ −0.02 to −0.59 (sample-sensitive) |
-| Decision | **Not promoted** — demoted in selector priors |
+## 2026-11-13 — Phase 2 (NIFTY SMA200 gate + expanded universe)
 
-## 2026-11-13 — Phase 1 improvement cycle (post-merge)
+### Setup
+- Universe expanded to **~120 liquid NSE names**
+- Daily history **~5y** (~1235 NIFTY bars)
+- Dual momentum with **NIFTY > SMA200 cash gate** + **sector-neutral residual ranking**
 
-### Hypothesis
-Daily high-turnover breakouts are cost-destroyed. Switch to dual momentum (absolute + relative), lower rebalance frequency, longer exits, and metric-weighted selection that crushes families with negative measured expectancy/Sharpe.
+### Full-sample comparison
 
-### Dual momentum (tuned defaults lookback=84, rebalance=42, top_n=3)
+| Strategy | Trades | Sharpe | Total return | Max DD | Profit factor | Stability |
+|----------|--------|--------|--------------|--------|---------------|-----------|
+| **dual_momentum_nifty_gated** | 44 | **0.75** | **+99%** | −30.6% | **2.35** | 0.29 |
+| dual_momentum (no gate) | 64 | 0.63 | +102% | **−55.0%** | 1.95 | 0.21 |
+| **nifty_buyhold_benchmark** | 1 | 0.55 | +39% | −16.5% | — | 0.80 |
 
-| Metric | Value |
-|--------|-------|
-| Trades | 22 |
-| Win rate | ~23–41% depending on window |
-| Full-sample Sharpe | ≈ **+0.10** |
-| Full-sample return | ≈ **+0.4%** |
-| Max DD | ≈ −24.5% |
-| Avg hold | ~56 trading days |
-| vs prior 126/21 defaults | Sharpe −0.91 / ret −26% — **rejected** |
+### Decisions
+1. **NIFTY SMA200 gate is a measured win** — better Sharpe than ungated dual-mom and beats NIFTY BH Sharpe/return on this sample, with far lower DD than ungated (−31% vs −55%).
+2. Still **not production-promoted**: walk-forward cells remain low-stability / thin trade counts. Gate is enabled for research + live **cash bias**, promotion still requires OOS stability.
+3. Scanner enforces the same gate (risk-on families disabled when NIFTY < SMA200).
 
-### Walk-forward dual-momentum grid
-Best OOS cells were mild positive Sharpe (~0.17) with **low stability** — **no production promotion**.
+### Live scan (same day)
+- Gate: **ON**
+- Ranked opportunities appeared (e.g. TECHM ensemble RS+trend) under the gated dual-momentum path.
 
-### NIFTY buy & hold benchmark
-Recorded via `ati.cli backtest-baseline --strategy benchmark` for opportunity-cost context.
-
-### Selector behaviour after metrics
-- Families with latest expectancy&lt;0 and Sharpe&lt;0 get weight crushed (~0.15×)
-- Bull prior boosts `relative_strength` / `trend_following` / `momentum`
-- `breakout` / `pullback` prior demoted until metrics recover
-
-### Live scan discipline
-Continues to emit **WAIT / zero BUY** when entries are overextended. Paper capital preserved.
-
-## Decisions locked by evidence
-
-1. Do **not** promote daily breakout or naive dual-momentum 126/21.
-2. Keep dual-momentum 84/42 as **research default**, not production.
-3. Prefer NO TRADE over forcing signals while expectancy remains weak after costs.
-4. Next levers: longer history / larger universe, sector-neutral residuals, explicit NIFTY SMA200 gate on entries, paid NSE feed for cleaner survivorship.
-
-## Commands to reproduce
+## Reproduce
 
 ```bash
-python3 -m ati.cli fetch-data --limit 40
-python3 -m ati.cli backtest-baseline --limit 40 --strategy all
-python3 -m ati.cli research --limit 30 --family dual
-python3 -m ati.cli scan --limit 40 --top 5
+python3 -m ati.cli fetch-data
+python3 -m ati.cli backtest-baseline --strategy dual-gated
+python3 -m ati.cli backtest-baseline --strategy benchmark
+python3 -m ati.cli research --limit 60 --family dual
+python3 -m ati.cli scan --limit 60 --top 5
 ```
