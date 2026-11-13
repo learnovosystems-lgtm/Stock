@@ -12,17 +12,21 @@ from ati.strategies.common import long_targets, lower_tf_confirmation, prepare_d
 class MeanReversionStrategy(Strategy):
     id = "mean_reversion_v1"
     family = "mean_reversion"
-    version = "1.0.0"
+    version = "1.1.0"
 
     def suitable_regimes(self) -> set[MarketRegime]:
         return {MarketRegime.SIDEWAYS, MarketRegime.HIGH_VOL, MarketRegime.BEAR}
 
     def generate(self, ctx: StrategyContext) -> Optional[RawSignal]:
         d = prepare_daily(ctx.daily)
-        if len(d) < 40:
+        if len(d) < 120:
             return None
         last = d.iloc[-1]
-        if any(pd.isna(last[c]) for c in ("bb_lower", "bb_mid", "rsi_14", "atr_14", "adx")):
+        if any(pd.isna(last[c]) for c in ("bb_lower", "bb_mid", "rsi_14", "atr_14", "adx", "sma_50")):
+            return None
+        # Quality filter: only stretch-to-mean while price holds SMA100 (no knives)
+        sma100 = float(d["Close"].tail(100).mean())
+        if float(last["Close"]) < sma100:
             return None
         # Prefer non-trending or mild trend
         if last["adx"] > 28 and last["Close"] < last["sma_50"]:

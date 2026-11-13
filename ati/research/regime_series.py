@@ -82,11 +82,22 @@ def classify_regime_at(
     return MarketRegime.UNCERTAIN
 
 
-def book_for_regime(regime: MarketRegime) -> str:
-    """Map regime → active research book. Cash when edge is undefined."""
+def book_for_regime(
+    regime: MarketRegime,
+    *,
+    nifty_above_trend: bool | None = None,
+) -> str:
+    """Map regime → active research book. Cash when edge is undefined.
+
+    SIDEWAYS only enables mean-reversion when the index is still above its
+    long trend (healthy consolidation). Hostile sideways / distribution under
+    a broken SMA → cash (fold-4 measured losses were knife-catching MR).
+    """
     if regime == MarketRegime.BULL:
         return "dual_momentum"
     if regime == MarketRegime.SIDEWAYS:
+        if nifty_above_trend is False:
+            return "cash"
         return "mean_reversion"
     if regime == MarketRegime.HIGH_VOL:
         return "cash"  # defensive: no new risk until vol compresses

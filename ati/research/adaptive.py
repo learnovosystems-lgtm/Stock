@@ -351,10 +351,15 @@ def run_regime_adaptive_book(
         return [s for s, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
 
     def mean_rev_targets(i: int) -> list[str]:
+        """Quality mean-rev: RSI stretch only while price holds SMA100 (no knives)."""
         scores: dict[str, float] = {}
         for sym in panel.columns:
             series = panel[sym].iloc[: i + 1]
-            if series.isna().iloc[-1] or len(series) < 25:
+            if series.isna().iloc[-1] or len(series) < 120:
+                continue
+            px = float(series.iloc[-1])
+            sma100 = float(series.tail(100).mean())
+            if px < sma100:
                 continue
             rsi = float(_rsi(series, 14).iloc[-1])
             if pd.isna(rsi) or rsi > 35.0:
@@ -429,15 +434,18 @@ def run_regime_adaptive_book(
             breadth_lookback=21,
         )
         regime_counts[regime.value] = regime_counts.get(regime.value, 0) + 1
-        desired_book = book_for_regime(regime)
+        nifty_trend_ok = True
+        if nifty_sma_gate:
+            nifty_trend_ok = nifty_above_sma(
+                nifty_aligned.iloc[: i + 1], window=nifty_sma_gate
+            )
+        desired_book = book_for_regime(regime, nifty_above_trend=nifty_trend_ok)
 
-        # Book-aware overlays: SMA200/breadth are bull-book gates; VIX/DD are global.
-        # Applying SMA200 to SIDEWAYS would permanently suppress mean-reversion.
+        # Book-aware overlays: SMA200/breadth gate bull book; VIX/DD are global.
+        # SIDEWAYS mean-rev already requires nifty_above_trend inside book_for_regime.
         cash_reason = "overlay_cash"
         if desired_book == "dual_momentum":
-            if nifty_sma_gate and not nifty_above_sma(
-                nifty_aligned.iloc[: i + 1], window=nifty_sma_gate
-            ):
+            if not nifty_trend_ok:
                 desired_book = "cash"
                 cash_reason = "nifty_gate_cash"
             elif min_breadth is not None and universe_breadth(panel, i, lookback) < min_breadth:

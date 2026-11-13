@@ -134,6 +134,32 @@ Mean-reversion sleeve helps fold 3; fold 4 still weak. Keep measuring live; do n
 3. **Adaptive research book:** continues as challenger until fold stability ≥ 0.35.
 4. Breakout/pullback remain demoted (negative measured expectancy).
 
+## 2026-11-13 — Phase 7 (quality mean-rev — adaptive fold-4 fix)
+
+### Diagnosis
+Adaptive fold 4 (2026) was **100% mean-reversion trades** in a SIDEWAYS/BEAR/UNCERTAIN tape with almost no BULL days — knife-catching under a broken index trend (Sharpe −0.74). Dual-mom correctly stayed cash.
+
+### Change
+1. SIDEWAYS → mean-rev **only if NIFTY > SMA200**; else cash  
+2. Mean-rev names must hold **price > SMA100** (quality pullback, not dump)  
+3. Live `mean_reversion_v1` gets the same SMA100 filter (v1.1.0)
+
+### Walk-forward OOS (adaptive)
+
+| Fold | Sharpe | BH | Beats | Trades |
+|------|--------|-----|-------|--------|
+| 1 | 0.40 | 1.51 | no | 9 |
+| 2 | 0.78 | 0.15 | yes | 5 |
+| 3 | 1.55 | 0.95 | yes | 20 |
+| 4 | 0.00 | 0.04 | no | 0 (cash — correct) |
+
+Aggregate: mean Sharpe **0.68**, stability **0.48**, trades 34, beat-BH 50%.  
+**Promotion: YES** → `regime_adaptive_multi` / `wf_4fold_adaptive`.
+
+Full-sample adaptive: Sharpe **0.61**, return **+38%**, DD −21% (was −0.56 / −19%).
+
+Dual-mom promotion unchanged (still production).
+
 ## Reproduce
 
 ```bash
