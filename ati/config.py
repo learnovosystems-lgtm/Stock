@@ -24,6 +24,7 @@ class RiskConfig:
     max_positions: int = 3
     min_reward_risk: float = 2.0
     max_portfolio_exposure_pct: float = 0.95
+    max_positions_per_sector: int = 1
     # Approximate NSE cash equity costs (delivery-oriented paper model)
     brokerage_pct: float = 0.0003
     stt_sell_pct: float = 0.001
@@ -60,6 +61,11 @@ class AppConfig:
     production_strategy_flag: str = "production"
     # Require NIFTY above this SMA before new risk-on entries
     nifty_trend_sma: int = 200
+    # Paper trading: only auto-enter these strategy id fragments
+    paper_allowed_strategy_substrings: tuple[str, ...] = (
+        "dual_momentum",
+        "relative_strength",
+    )
 
 
 DEFAULT = AppConfig()

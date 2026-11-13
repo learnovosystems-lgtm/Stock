@@ -32,11 +32,25 @@ class Position:
 
 
 class PaperBroker:
-    def __init__(self, db_path: Path | None = None, risk: RiskConfig | None = None):
+    def __init__(
+        self,
+        db_path: Path | None = None,
+        risk: RiskConfig | None = None,
+        *,
+        allowed_strategy_substrings: tuple[str, ...] | None = None,
+        symbol_sectors: dict[str, str] | None = None,
+    ):
         ensure_dirs()
         self.db_path = db_path or (STATE_DIR / "paper.db")
         self.risk_cfg = risk or DEFAULT.risk
         self.risk = RiskEngine(self.risk_cfg)
+        self.allowed_strategy_substrings = (
+            allowed_strategy_substrings
+            if allowed_strategy_substrings is not None
+            else DEFAULT.paper_allowed_strategy_substrings
+        )
+        self.symbol_sectors = symbol_sectors or {}
+        self._position_sectors: dict[str, str] = {}
         self._init_db()
 
     def _conn(self) -> sqlite3.Connection:
@@ -137,12 +151,40 @@ class PaperBroker:
             day_pnl=acct["day_pnl"],
         )
 
+    def _strategy_allowed(self, strategy_selected: str) -> bool:
+        if not self.allowed_strategy_substrings:
+            return True
+        s = strategy_selected.lower()
+        return any(frag.lower() in s for frag in self.allowed_strategy_substrings)
+
+    def _sector_for(self, stock: str, fallback: str | None = None) -> str:
+        for key in (stock, stock + ".NS", stock.replace(".NS", "")):
+            if key in self.symbol_sectors:
+                return self.symbol_sectors[key]
+            if key in self._position_sectors:
+                return self._position_sectors[key]
+        return fallback or "UNKNOWN"
+
     def try_enter(self, opp: Opportunity) -> tuple[bool, str]:
         if opp.signal.value != "BUY" or opp.position_quantity < 1:
             return False, "Signal not actionable BUY"
+        if not self._strategy_allowed(opp.strategy_selected):
+            return False, f"Strategy not allowed for paper: {opp.strategy_selected}"
         state = self.risk_state()
         if any(p.symbol == opp.stock for p in self.positions()):
             return False, "Already in position"
+
+        # Sector concentration limit
+        sector = opp.sector or self._sector_for(opp.stock)
+        open_sectors = [self._sector_for(p.symbol) for p in self.positions()]
+        if open_sectors.count(sector) >= self.risk_cfg.max_positions_per_sector:
+            return False, f"Max positions for sector {sector} reached"
+
+        # Minimum stop distance guard (~1%)
+        stop_dist_pct = abs(opp.ideal_entry - opp.stop_loss) / max(opp.ideal_entry, 1e-9)
+        if stop_dist_pct < 0.01:
+            return False, "Stop too tight (<1%); skipped"
+
         sizing = self.risk.size_long(
             equity=state.equity,
             cash=state.cash,
@@ -186,8 +228,9 @@ class PaperBroker:
                 "INSERT INTO fills(ts, symbol, side, qty, price, pnl, note) VALUES (?,?,?,?,?,?,?)",
                 (now, opp.stock, "BUY", qty, px, 0.0, opp.strategy_selected),
             )
+        self._position_sectors[opp.stock] = sector
         self.mark_to_market({opp.stock: px})
-        return True, f"Bought {qty} {opp.stock} @ {px:.2f}"
+        return True, f"Bought {qty} {opp.stock} @ {px:.2f} [{opp.strategy_selected}]"
 
     def mark_to_market(self, prices: dict[str, float]) -> None:
         acct = self.account()

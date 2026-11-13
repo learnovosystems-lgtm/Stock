@@ -47,7 +47,15 @@ class StrategyRegistry:
         data = self._read()
         return [s for s in data["strategies"] if s.get("production")]
 
-    def promote(self, strategy_id: str, version: str, *, min_trades: int = 20, min_stability: float = 0.45) -> bool:
+    def promote(
+        self,
+        strategy_id: str,
+        version: str,
+        *,
+        min_trades: int = 20,
+        min_stability: float = 0.45,
+        max_dd: float = -0.25,
+    ) -> bool:
         """Promote only if latest OOS metrics clear gates."""
         data = self._read()
         candidates = [
@@ -62,7 +70,7 @@ class StrategyRegistry:
             return False
         if latest.get("stability_score", 0) < min_stability:
             return False
-        if latest.get("max_drawdown", -1) < -0.25:
+        if latest.get("max_drawdown", -1) < max_dd:
             return False
         # Demote others of same id
         for s in data["strategies"]:

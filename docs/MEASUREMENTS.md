@@ -35,12 +35,46 @@ NIFTY buy-hold still ahead on that window.
 - Gate: **ON**
 - Ranked opportunities appeared (e.g. TECHM ensemble RS+trend) under the gated dual-momentum path.
 
+## 2026-11-13 — Phase 3 (rolling walk-forward + gated paper)
+
+### Goals
+1. Harden OOS evaluation with rolling folds (+ warmup so SMA200 is defined)
+2. Restrict paper auto-entries to dual_momentum / relative_strength only
+3. Enforce max 1 position per sector + min 1% stop distance
+
+### Rolling walk-forward (4 folds, gated dual-mom)
+
+| Fold | OOS Sharpe | BH Sharpe | Beats BH | Trades |
+|------|------------|-----------|----------|--------|
+| 1 | 2.10 | 1.51 | yes | 10 |
+| 2 | 0.63 | 0.15 | yes | 8 |
+| 3 | 0.17 | 0.95 | no | 9 |
+| 4 | −0.45 | 0.04 | no | 3 |
+
+Aggregate: mean Sharpe **0.61**, trades **30**, DD worst **−21%**, beat-BH share **50%**, fold stability **0.34**.
+
+**Promotion: blocked** (stability 0.34 &lt; 0.35 gate — near miss; recent fold weak).  
+Paper trading of gated BUYs is enabled anyway for live measurement vs backtest.
+
+### Paper session smoke
+EOD session entered **COFORGE** via `dual_momentum_v2` (allowed list enforced).
+
+### Commands
+
+```bash
+python3 -m ati.cli walkforward --folds 4
+python3 -m ati.cli session eod
+python3 -m ati.cli paper-status
+```
+
 ## Reproduce
 
 ```bash
 python3 -m ati.cli fetch-data
 python3 -m ati.cli backtest-baseline --strategy dual-gated
 python3 -m ati.cli backtest-baseline --strategy benchmark
+python3 -m ati.cli walkforward --folds 4
 python3 -m ati.cli research --limit 60 --family dual
 python3 -m ati.cli scan --limit 60 --top 5
+python3 -m ati.cli session eod
 ```
