@@ -15,7 +15,7 @@ from ati.data.provider import MarketDataProvider
 from ati.data.universe import load_universe
 from ati.ml.train import train_from_frames
 from ati.models.opportunity import StrategyMetrics
-from ati.ops.session import is_market_open, run_eod, run_intrasession_once
+from ati.ops.session import _default_broker, is_market_open, run_eod, run_intrasession_once
 from ati.paper.portfolio import PaperBroker
 from ati.research.backtest import (
     run_breakout_momentum_baseline,
@@ -25,6 +25,7 @@ from ati.research.backtest import (
 )
 from ati.research.laboratory import ResearchLaboratory
 from ati.research.registry import StrategyRegistry
+from ati.research.walkforward import run_rolling_walkforward
 from ati.scanner.market_scanner import MarketScanner
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="Autonomous Adaptive Trading Intelligence (India)")
@@ -243,16 +244,70 @@ def train_ml(limit: int = typer.Option(40, help="Symbols for training")):
     console.print(report)
 
 
+@app.command("walkforward")
+def walkforward(
+    limit: int = typer.Option(0, help="Symbols (0=full universe)"),
+    folds: int = typer.Option(4, help="Number of OOS folds"),
+):
+    """Rolling walk-forward for NIFTY-gated dual momentum; may promote if gates clear."""
+    ensure_dirs()
+    provider = MarketDataProvider()
+    uni = load_universe()
+    if limit > 0:
+        uni = uni[:limit]
+    frames = provider.get_many_daily([i.symbol for i in uni])
+    frames = {k: v for k, v in frames.items() if v is not None and len(v) > 200}
+    nifty = provider.nifty()
+    sectors = {i.symbol: i.sector for i in uni}
+    report = run_rolling_walkforward(frames, nifty, sectors, n_folds=folds)
+    table = Table(title="Rolling walk-forward OOS folds")
+    table.add_column("fold")
+    table.add_column("test")
+    table.add_column("trades")
+    table.add_column("sharpe")
+    table.add_column("bh_sharpe")
+    table.add_column("ret")
+    table.add_column("beats_bh")
+    for f in report.folds:
+        table.add_row(
+            str(f.fold),
+            f"{f.test_start}→{f.test_end}",
+            str(f.strategy.trades),
+            f"{f.strategy.sharpe:.3f}",
+            f"{f.benchmark.sharpe:.3f}",
+            f"{f.strategy.total_return:.3f}",
+            "yes" if f.beats_benchmark_sharpe else "no",
+        )
+    console.print(table)
+    console.print_json(
+        data={
+            "oos_sharpe_mean": round(report.oos_sharpe_mean, 4),
+            "oos_sharpe_std": round(report.oos_sharpe_std, 4),
+            "oos_return_mean": round(report.oos_return_mean, 4),
+            "oos_max_dd_worst": round(report.oos_max_dd_worst, 4),
+            "oos_trades": report.oos_trades,
+            "fold_stability": round(report.fold_stability, 4),
+            "beats_benchmark_fold_share": round(report.beats_benchmark_fold_share, 4),
+            "promotable": report.promotable,
+            "reason": report.reason,
+            "version": report.metrics.version,
+            "production": [p.get("version") for p in StrategyRegistry().list_production()],
+        }
+    )
+
+
 @app.command("paper-status")
 def paper_status():
     """Show paper account, positions, and risk state."""
-    broker = PaperBroker()
-    console.print_json(data=broker.snapshot())
+    broker = _default_broker()
+    snap = broker.snapshot()
+    snap["allowed_strategies"] = list(broker.allowed_strategy_substrings)
+    console.print_json(data=snap)
 
 
 @app.command("session")
 def session(mode: str = typer.Argument("auto", help="auto|intra|eod")):
-    """Run continuous-operation pass (intrasession or EOD)."""
+    """Run continuous-operation pass (gated paper entries only)."""
     ensure_dirs()
     if mode == "auto":
         mode = "intra" if is_market_open() else "eod"

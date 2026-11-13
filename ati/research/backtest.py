@@ -426,6 +426,7 @@ def run_dual_momentum_baseline(
     sectors: dict[str, str] | None = None,
     sector_neutral: bool = True,
     strategy_id: str = "dual_momentum_baseline",
+    trade_start=None,
 ) -> BacktestResult:
     """Low-turnover dual momentum with optional NIFTY SMA cash gate + sector neutrality.
 
@@ -504,10 +505,14 @@ def run_dual_momentum_baseline(
             }
         )
 
+    trade_start_ts = pd.Timestamp(trade_start) if trade_start is not None else None
+
     for i, dt in enumerate(dates):
         equity = portfolio_value(i)
         curve.append((dt, equity))
         if i < max(lookback, nifty_sma_gate or 0):
+            continue
+        if trade_start_ts is not None and pd.Timestamp(dt) < trade_start_ts:
             continue
         if i - last_reb < rebalance_every:
             continue
