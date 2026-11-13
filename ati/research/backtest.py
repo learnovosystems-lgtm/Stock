@@ -422,12 +422,18 @@ def run_dual_momentum_baseline(
     top_n: int = 3,
     rebalance_every: int = 42,
     abs_mom_floor: float = 0.0,
+    nifty_sma_gate: int = 200,
+    sectors: dict[str, str] | None = None,
+    sector_neutral: bool = True,
+    strategy_id: str = "dual_momentum_baseline",
 ) -> BacktestResult:
-    """Low-turnover dual momentum (absolute + relative), ~bi-monthly rebalance.
+    """Low-turnover dual momentum with optional NIFTY SMA cash gate + sector neutrality.
 
-    Defaults (84/42/3) chosen from measured grid vs worse 126/21 defaults.
-    Still subject to promotion gates — not auto-production.
+    Defaults (84/42/3) from Phase-1 grid. Phase-2 adds SMA200 risk-on gate and
+    sector-median residual ranking to cut concentrated sector bets.
     """
+    from ati.research.gates import nifty_above_sma, sector_neutral_scores
+
     risk = risk or DEFAULT.risk
     cost_rt = RiskEngine(risk).round_trip_cost_pct()
 
@@ -437,7 +443,7 @@ def run_dual_momentum_baseline(
         if df is not None and len(df) >= lookback + 40
     }
     empty = BacktestResult(
-        strategy_id="dual_momentum_baseline",
+        strategy_id=strategy_id,
         trades=0,
         win_rate=0.0,
         expectancy=0.0,
@@ -455,9 +461,12 @@ def run_dual_momentum_baseline(
         return empty
 
     panel = pd.DataFrame(closes).sort_index().ffill()
-    nifty_close = None
+    nifty_aligned = None
     if nifty is not None and len(nifty) > lookback:
-        nifty_close = nifty["Close"].astype(float).reindex(panel.index).ffill()
+        nifty_aligned = nifty.reindex(panel.index).ffill()
+        nifty_close = nifty_aligned["Close"].astype(float)
+    else:
+        nifty_close = None
 
     dates = list(panel.index)
     cash = initial_capital
@@ -469,7 +478,6 @@ def run_dual_momentum_baseline(
     last_reb = -10_000
 
     def portfolio_value(i: int) -> float:
-        dt = dates[i]
         value = cash
         for sym, sh in holdings.items():
             value += sh * float(panel.iloc[i][sym])
@@ -499,9 +507,21 @@ def run_dual_momentum_baseline(
     for i, dt in enumerate(dates):
         equity = portfolio_value(i)
         curve.append((dt, equity))
-        if i < lookback:
+        if i < max(lookback, nifty_sma_gate or 0):
             continue
         if i - last_reb < rebalance_every:
+            continue
+
+        # Hard cash gate: if NIFTY below SMA, flatten and stay in cash
+        risk_on = True
+        if nifty_sma_gate and nifty_aligned is not None:
+            risk_on = nifty_above_sma(nifty_aligned.iloc[: i + 1], window=nifty_sma_gate)
+
+        if not risk_on:
+            for sym in list(holdings):
+                close_position(sym, i, "nifty_gate_cash")
+            last_reb = i
+            curve[-1] = (dt, portfolio_value(i))
             continue
 
         scores: dict[str, float] = {}
@@ -521,6 +541,9 @@ def run_dual_momentum_baseline(
                     score = abs_mom - (n_now / n_past - 1.0)
             scores[sym] = score
 
+        if sector_neutral and sectors:
+            scores = sector_neutral_scores(scores, sectors)
+
         target = [s for s, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
         target_set = set(target)
 
@@ -534,11 +557,8 @@ def run_dual_momentum_baseline(
             curve[-1] = (dt, equity)
             continue
 
-        # Equal-weight remaining book: sell names already held that stay, rebuy to target weight
-        # Keep survivors; only buy missing names with free cash + optional trim.
         n = len(target)
         target_value = equity / n
-        # Trim overweight survivors into cash
         for sym in list(holdings):
             if sym not in target_set:
                 continue
@@ -594,7 +614,7 @@ def run_dual_momentum_baseline(
     losses = rets[rets <= 0]
     pf = float(wins.sum() / abs(losses.sum())) if len(losses) and abs(losses.sum()) > 0 else 99.0
     return BacktestResult(
-        strategy_id="dual_momentum_baseline",
+        strategy_id=strategy_id,
         trades=len(trade_log),
         win_rate=float((rets > 0).mean()),
         expectancy=float(rets.mean()),

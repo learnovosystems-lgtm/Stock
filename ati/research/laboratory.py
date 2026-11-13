@@ -240,8 +240,12 @@ class ResearchLaboratory:
         results: list[ExperimentResult] = []
         for values in product(*[grid[k] for k in keys]):
             params = dict(zip(keys, values))
-            train_bt = run_dual_momentum_baseline(train, nifty_train, **params)
-            test_bt = run_dual_momentum_baseline(test, nifty_test, **params)
+            train_bt = run_dual_momentum_baseline(
+                train, nifty_train, nifty_sma_gate=200, sector_neutral=False, **params
+            )
+            test_bt = run_dual_momentum_baseline(
+                test, nifty_test, nifty_sma_gate=200, sector_neutral=False, **params
+            )
             metrics = StrategyMetrics(
                 strategy_id="dual_momentum_baseline",
                 version=(

@@ -15,6 +15,7 @@ _FAMILY_ALIASES = {
     "breakout_momentum_baseline": "breakout",
     "pullback_trend_baseline": "pullback",
     "dual_momentum_baseline": "relative_strength",
+    "dual_momentum_nifty_gated": "relative_strength",
     "breakout_param_search": "breakout",
 }
 

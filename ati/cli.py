@@ -101,16 +101,22 @@ def scan(
 
 @app.command("backtest-baseline")
 def backtest_baseline(
-    limit: int = typer.Option(30, help="Symbols to include"),
-    strategy: str = typer.Option("all", help="breakout|pullback|dual|benchmark|all"),
+    limit: int = typer.Option(0, help="Symbols to include (0=full universe)"),
+    strategy: str = typer.Option(
+        "all",
+        help="breakout|pullback|dual|dual-gated|benchmark|all",
+    ),
 ):
     """Measure baselines and record metrics (honest, including losses)."""
     ensure_dirs()
     provider = MarketDataProvider()
-    uni = load_universe()[:limit]
+    uni = load_universe()
+    if limit > 0:
+        uni = uni[:limit]
     frames = provider.get_many_daily([i.symbol for i in uni])
-    frames = {k: v for k, v in frames.items() if v is not None and len(v) > 100}
+    frames = {k: v for k, v in frames.items() if v is not None and len(v) > 200}
     nifty = provider.nifty()
+    sectors = {i.symbol: i.sector for i in uni}
     registry = StrategyRegistry()
 
     def _record(result, version: str = "1.1.0"):
@@ -126,6 +132,8 @@ def backtest_baseline(
             "avg_holding_days": round(result.avg_holding_days, 2),
             "total_return": round(result.total_return, 4),
             "stability_score": round(result.stability_score, 4),
+            "symbols": len(frames),
+            "bars_nifty": len(nifty),
         }
         console.print(json.dumps(payload, indent=2))
         registry.record_metrics(
@@ -151,7 +159,28 @@ def backtest_baseline(
     if strategy in ("pullback", "all"):
         _record(run_pullback_trend_baseline(frames))
     if strategy in ("dual", "all"):
-        _record(run_dual_momentum_baseline(frames, nifty), version="1.1.0-lb84-rb42")
+        _record(
+            run_dual_momentum_baseline(
+                frames,
+                nifty,
+                nifty_sma_gate=0,
+                sector_neutral=False,
+                strategy_id="dual_momentum_baseline",
+            ),
+            version="1.1.0-lb84-rb42",
+        )
+    if strategy in ("dual-gated", "all"):
+        _record(
+            run_dual_momentum_baseline(
+                frames,
+                nifty,
+                nifty_sma_gate=200,
+                sectors=sectors,
+                sector_neutral=True,
+                strategy_id="dual_momentum_nifty_gated",
+            ),
+            version="2.0.0-sma200-sectneu",
+        )
     if strategy in ("benchmark", "all"):
         _record(run_nifty_buyhold_benchmark(nifty), version="1.0.0")
 
