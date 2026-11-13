@@ -427,13 +427,15 @@ def run_dual_momentum_baseline(
     sector_neutral: bool = True,
     strategy_id: str = "dual_momentum_baseline",
     trade_start=None,
+    india_vix: pd.DataFrame | None = None,
+    vix_cash_threshold: float | None = 18.0,
 ) -> BacktestResult:
-    """Low-turnover dual momentum with optional NIFTY SMA cash gate + sector neutrality.
+    """Low-turnover dual momentum with NIFTY SMA gate, sector neutrality, optional VIX cash.
 
-    Defaults (84/42/3) from Phase-1 grid. Phase-2 adds SMA200 risk-on gate and
-    sector-median residual ranking to cut concentrated sector bets.
+    Phase-4: India VIX overlay flattens to cash when VIX >= threshold to stabilize
+    weak high-vol OOS folds.
     """
-    from ati.research.gates import nifty_above_sma, sector_neutral_scores
+    from ati.research.gates import india_vix_elevated, nifty_above_sma, sector_neutral_scores
 
     risk = risk or DEFAULT.risk
     cost_rt = RiskEngine(risk).round_trip_cost_pct()
@@ -468,6 +470,10 @@ def run_dual_momentum_baseline(
         nifty_close = nifty_aligned["Close"].astype(float)
     else:
         nifty_close = None
+
+    vix_aligned = None
+    if india_vix is not None and len(india_vix) and vix_cash_threshold is not None:
+        vix_aligned = india_vix.reindex(panel.index).ffill()
 
     dates = list(panel.index)
     cash = initial_capital
@@ -517,14 +523,19 @@ def run_dual_momentum_baseline(
         if i - last_reb < rebalance_every:
             continue
 
-        # Hard cash gate: if NIFTY below SMA, flatten and stay in cash
+        # Hard cash gates: NIFTY below SMA and/or elevated India VIX
         risk_on = True
+        cash_reason = "nifty_gate_cash"
         if nifty_sma_gate and nifty_aligned is not None:
             risk_on = nifty_above_sma(nifty_aligned.iloc[: i + 1], window=nifty_sma_gate)
+        if risk_on and vix_aligned is not None and vix_cash_threshold is not None:
+            if india_vix_elevated(vix_aligned.iloc[: i + 1], threshold=vix_cash_threshold):
+                risk_on = False
+                cash_reason = "vix_gate_cash"
 
         if not risk_on:
             for sym in list(holdings):
-                close_position(sym, i, "nifty_gate_cash")
+                close_position(sym, i, cash_reason)
             last_reb = i
             curve[-1] = (dt, portfolio_value(i))
             continue

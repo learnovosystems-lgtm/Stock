@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from ati.research.gates import nifty_above_sma, sector_neutral_scores
+from ati.research.gates import india_vix_elevated, nifty_above_sma, sector_neutral_scores
 
 
 def test_nifty_above_sma_true_and_false():
@@ -15,6 +15,14 @@ def test_nifty_above_sma_true_and_false():
     close2 = pd.Series(np.linspace(200, 100, len(idx)), index=idx)
     df2 = pd.DataFrame({"Close": close2})
     assert nifty_above_sma(df2, window=200) is False
+
+
+def test_india_vix_elevated():
+    idx = pd.date_range("2024-01-01", periods=5, freq="B")
+    low = pd.DataFrame({"Close": [12, 13, 14, 15, 16]}, index=idx)
+    high = pd.DataFrame({"Close": [12, 13, 14, 15, 19]}, index=idx)
+    assert india_vix_elevated(low, threshold=18.0) is False
+    assert india_vix_elevated(high, threshold=18.0) is True
 
 
 def test_sector_neutral_scores_subtract_median():

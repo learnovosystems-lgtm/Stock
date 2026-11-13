@@ -303,6 +303,139 @@
       "oos": true,
       "created_at": "2026-11-13T10:26:13.478619Z",
       "production": false
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_3fold_lb84_rb42",
+      "sample_count": 12,
+      "win_rate": 0.6111111111111112,
+      "expectancy": 0.02769424084131462,
+      "sharpe": 0.7291462036826148,
+      "sortino": 87.0428733287679,
+      "max_drawdown": -0.06346375510908409,
+      "profit_factor": 3.99045350874534,
+      "avg_holding_days": 23.0,
+      "stability_score": 0.485771466842509,
+      "total_return": 0.045670754332619724,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": true,
+      "created_at": "2026-11-13T10:27:49.652203Z",
+      "production": false
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_4fold_lb84_rb42",
+      "sample_count": 30,
+      "win_rate": 0.4361111111111111,
+      "expectancy": 0.08534098625781034,
+      "sharpe": 0.6118629436587253,
+      "sortino": 0.7145024740044703,
+      "max_drawdown": -0.20870320559761701,
+      "profit_factor": 5.058333969955162,
+      "avg_holding_days": 54.425,
+      "stability_score": 0.34494563442902937,
+      "total_return": 0.2872258900516368,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": true,
+      "created_at": "2026-11-13T10:27:57.618609Z",
+      "production": false
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "2.1.0-sma200-vix18",
+      "sample_count": 38,
+      "win_rate": 0.4473684210526316,
+      "expectancy": 0.0600631598242626,
+      "sharpe": 0.6330862950211176,
+      "sortino": 0.6375581676435274,
+      "max_drawdown": -0.3054657830512866,
+      "profit_factor": 2.160693678491064,
+      "avg_holding_days": 53.05263157894737,
+      "stability_score": 0.6014789402875257,
+      "total_return": 0.7106972712564903,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T10:28:05.192362Z",
+      "production": false
+    },
+    {
+      "strategy_id": "nifty_buyhold_benchmark",
+      "version": "1.0.0",
+      "sample_count": 1,
+      "win_rate": 1.0,
+      "expectancy": 0.38766234564612434,
+      "sharpe": 0.54977326997228,
+      "sortino": 0.7655244170168328,
+      "max_drawdown": -0.16465934060306942,
+      "profit_factor": 99.0,
+      "avg_holding_days": 1235.0,
+      "stability_score": 0.8,
+      "total_return": 0.38766234564612434,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T10:28:12.683701Z",
+      "production": false
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_4fold_lb84_rb42",
+      "sample_count": 30,
+      "win_rate": 0.4361111111111111,
+      "expectancy": 0.08534098625781034,
+      "sharpe": 0.6118629436587253,
+      "sortino": 0.7145024740044703,
+      "max_drawdown": -0.20870320559761701,
+      "profit_factor": 5.058333969955162,
+      "avg_holding_days": 54.425,
+      "stability_score": 0.34494563442902937,
+      "total_return": 0.2872258900516368,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": true,
+      "created_at": "2026-11-13T10:28:24.938578Z",
+      "production": false
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_4fold_lb84_rb42",
+      "sample_count": 25,
+      "win_rate": 0.4428571428571429,
+      "expectancy": 0.06367988552231228,
+      "sharpe": 0.5321531532145032,
+      "sortino": 0.632961887800625,
+      "max_drawdown": -0.20870319142497407,
+      "profit_factor": 4.912092200115523,
+      "avg_holding_days": 50.56071428571428,
+      "stability_score": 0.2637748823613503,
+      "total_return": 0.24194034188548733,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": true,
+      "created_at": "2026-11-13T10:28:25.281165Z",
+      "production": false
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_4fold_lb84_rb42",
+      "sample_count": 23,
+      "win_rate": 0.4616071428571428,
+      "expectancy": 0.08565140251374564,
+      "sharpe": 0.5841296574826444,
+      "sortino": 0.6188620689552502,
+      "max_drawdown": -0.20870319142497407,
+      "profit_factor": 9.62278825293914,
+      "avg_holding_days": 50.354464285714286,
+      "stability_score": 0.26573968748418664,
+      "total_return": 0.2567540656691967,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": true,
+      "created_at": "2026-11-13T10:28:25.613136Z",
+      "production": false
     }
   ],
   "experiments": [
@@ -3737,6 +3870,338 @@
       },
       "success": false,
       "created_at": "2026-11-13T10:26:13.482066+00:00"
+    },
+    {
+      "name": "rolling_walkforward_gated",
+      "params": {
+        "n_folds": 3,
+        "lookback": 84,
+        "rebalance_every": 42,
+        "top_n": 3,
+        "nifty_sma_gate": 200,
+        "vix_cash_threshold": null
+      },
+      "result": {
+        "metrics": {
+          "strategy_id": "dual_momentum_nifty_gated",
+          "version": "wf_3fold_lb84_rb42",
+          "sample_count": 12,
+          "win_rate": 0.6111111111111112,
+          "expectancy": 0.02769424084131462,
+          "sharpe": 0.7291462036826148,
+          "sortino": 87.0428733287679,
+          "max_drawdown": -0.06346375510908409,
+          "profit_factor": 3.99045350874534,
+          "avg_holding_days": 23.0,
+          "stability_score": 0.485771466842509,
+          "total_return": 0.045670754332619724,
+          "regime": "ALL",
+          "cap_bucket": "ALL",
+          "oos": true,
+          "created_at": "2026-11-13T10:27:49.652203Z"
+        },
+        "beat_share": 0.3333333333333333,
+        "folds": [
+          {
+            "fold": 1,
+            "test": "2019-10-22->2020-04-20",
+            "sharpe": 0.0,
+            "bench_sharpe": -1.350216077956044,
+            "ret": 0.0,
+            "trades": 0
+          },
+          {
+            "fold": 2,
+            "test": "2020-04-21->2020-10-19",
+            "sharpe": 0.996229662276207,
+            "bench_sharpe": 1.7432398656945662,
+            "ret": 0.013972917246123151,
+            "trades": 3
+          },
+          {
+            "fold": 3,
+            "test": "2020-10-20->2021-04-19",
+            "sharpe": 1.1912089487716373,
+            "bench_sharpe": 0.007247181943798249,
+            "ret": 0.12303934575173603,
+            "trades": 9
+          }
+        ]
+      },
+      "success": false,
+      "created_at": "2026-11-13T10:27:49.655894+00:00"
+    },
+    {
+      "name": "rolling_walkforward_gated",
+      "params": {
+        "n_folds": 4,
+        "lookback": 84,
+        "rebalance_every": 42,
+        "top_n": 3,
+        "nifty_sma_gate": 200,
+        "vix_cash_threshold": 18.0
+      },
+      "result": {
+        "metrics": {
+          "strategy_id": "dual_momentum_nifty_gated",
+          "version": "wf_4fold_lb84_rb42",
+          "sample_count": 30,
+          "win_rate": 0.4361111111111111,
+          "expectancy": 0.08534098625781034,
+          "sharpe": 0.6118629436587253,
+          "sortino": 0.7145024740044703,
+          "max_drawdown": -0.20870320559761701,
+          "profit_factor": 5.058333969955162,
+          "avg_holding_days": 54.425,
+          "stability_score": 0.34494563442902937,
+          "total_return": 0.2872258900516368,
+          "regime": "ALL",
+          "cap_bucket": "ALL",
+          "oos": true,
+          "created_at": "2026-11-13T10:27:57.618609Z"
+        },
+        "beat_share": 0.5,
+        "folds": [
+          {
+            "fold": 1,
+            "test": "2023-08-10->2024-06-06",
+            "sharpe": 2.0977423272166975,
+            "bench_sharpe": 1.513425992998823,
+            "ret": 1.0046127395313746,
+            "trades": 10
+          },
+          {
+            "fold": 2,
+            "test": "2024-06-07->2025-03-26",
+            "sharpe": 0.6339960834243061,
+            "bench_sharpe": 0.14787484221740785,
+            "ret": 0.19698663627691504,
+            "trades": 8
+          },
+          {
+            "fold": 3,
+            "test": "2025-03-27->2026-01-19",
+            "sharpe": 0.1665519937444125,
+            "bench_sharpe": 0.9520693779831199,
+            "ret": 0.020750388776020534,
+            "trades": 9
+          },
+          {
+            "fold": 4,
+            "test": "2026-01-20->2026-11-13",
+            "sharpe": -0.45083862975051514,
+            "bench_sharpe": 0.04338440029255207,
+            "ret": -0.07344620437776317,
+            "trades": 3
+          }
+        ]
+      },
+      "success": false,
+      "created_at": "2026-11-13T10:27:57.622900+00:00"
+    },
+    {
+      "name": "rolling_walkforward_gated",
+      "params": {
+        "n_folds": 4,
+        "lookback": 84,
+        "rebalance_every": 42,
+        "top_n": 3,
+        "nifty_sma_gate": 200,
+        "vix_cash_threshold": 18.0
+      },
+      "result": {
+        "metrics": {
+          "strategy_id": "dual_momentum_nifty_gated",
+          "version": "wf_4fold_lb84_rb42",
+          "sample_count": 30,
+          "win_rate": 0.4361111111111111,
+          "expectancy": 0.08534098625781034,
+          "sharpe": 0.6118629436587253,
+          "sortino": 0.7145024740044703,
+          "max_drawdown": -0.20870320559761701,
+          "profit_factor": 5.058333969955162,
+          "avg_holding_days": 54.425,
+          "stability_score": 0.34494563442902937,
+          "total_return": 0.2872258900516368,
+          "regime": "ALL",
+          "cap_bucket": "ALL",
+          "oos": true,
+          "created_at": "2026-11-13T10:28:24.938578Z"
+        },
+        "beat_share": 0.5,
+        "folds": [
+          {
+            "fold": 1,
+            "test": "2023-08-10->2024-06-06",
+            "sharpe": 2.0977423272166975,
+            "bench_sharpe": 1.513425992998823,
+            "ret": 1.0046127395313746,
+            "trades": 10
+          },
+          {
+            "fold": 2,
+            "test": "2024-06-07->2025-03-26",
+            "sharpe": 0.6339960834243061,
+            "bench_sharpe": 0.14787484221740785,
+            "ret": 0.19698663627691504,
+            "trades": 8
+          },
+          {
+            "fold": 3,
+            "test": "2025-03-27->2026-01-19",
+            "sharpe": 0.1665519937444125,
+            "bench_sharpe": 0.9520693779831199,
+            "ret": 0.020750388776020534,
+            "trades": 9
+          },
+          {
+            "fold": 4,
+            "test": "2026-01-20->2026-11-13",
+            "sharpe": -0.45083862975051514,
+            "bench_sharpe": 0.04338440029255207,
+            "ret": -0.07344620437776317,
+            "trades": 3
+          }
+        ]
+      },
+      "success": false,
+      "created_at": "2026-11-13T10:28:24.942532+00:00"
+    },
+    {
+      "name": "rolling_walkforward_gated",
+      "params": {
+        "n_folds": 4,
+        "lookback": 84,
+        "rebalance_every": 42,
+        "top_n": 3,
+        "nifty_sma_gate": 200,
+        "vix_cash_threshold": 16.0
+      },
+      "result": {
+        "metrics": {
+          "strategy_id": "dual_momentum_nifty_gated",
+          "version": "wf_4fold_lb84_rb42",
+          "sample_count": 25,
+          "win_rate": 0.4428571428571429,
+          "expectancy": 0.06367988552231228,
+          "sharpe": 0.5321531532145032,
+          "sortino": 0.632961887800625,
+          "max_drawdown": -0.20870319142497407,
+          "profit_factor": 4.912092200115523,
+          "avg_holding_days": 50.56071428571428,
+          "stability_score": 0.2637748823613503,
+          "total_return": 0.24194034188548733,
+          "regime": "ALL",
+          "cap_bucket": "ALL",
+          "oos": true,
+          "created_at": "2026-11-13T10:28:25.281165Z"
+        },
+        "beat_share": 0.25,
+        "folds": [
+          {
+            "fold": 1,
+            "test": "2023-08-10->2024-06-06",
+            "sharpe": 2.0977423272166975,
+            "bench_sharpe": 1.513425992998823,
+            "ret": 1.0046127395313746,
+            "trades": 10
+          },
+          {
+            "fold": 2,
+            "test": "2024-06-07->2025-03-26",
+            "sharpe": -0.12100749759164331,
+            "bench_sharpe": 0.14787484221740785,
+            "ret": -0.053099236400255156,
+            "trades": 5
+          },
+          {
+            "fold": 3,
+            "test": "2025-03-27->2026-01-19",
+            "sharpe": 0.6027164129834734,
+            "bench_sharpe": 0.9520693779831199,
+            "ret": 0.08969406878859298,
+            "trades": 7
+          },
+          {
+            "fold": 4,
+            "test": "2026-01-20->2026-11-13",
+            "sharpe": -0.45083862975051514,
+            "bench_sharpe": 0.04338440029255207,
+            "ret": -0.07344620437776317,
+            "trades": 3
+          }
+        ]
+      },
+      "success": false,
+      "created_at": "2026-11-13T10:28:25.285158+00:00"
+    },
+    {
+      "name": "rolling_walkforward_gated",
+      "params": {
+        "n_folds": 4,
+        "lookback": 84,
+        "rebalance_every": 42,
+        "top_n": 3,
+        "nifty_sma_gate": 200,
+        "vix_cash_threshold": 15.0
+      },
+      "result": {
+        "metrics": {
+          "strategy_id": "dual_momentum_nifty_gated",
+          "version": "wf_4fold_lb84_rb42",
+          "sample_count": 23,
+          "win_rate": 0.4616071428571428,
+          "expectancy": 0.08565140251374564,
+          "sharpe": 0.5841296574826444,
+          "sortino": 0.6188620689552502,
+          "max_drawdown": -0.20870319142497407,
+          "profit_factor": 9.62278825293914,
+          "avg_holding_days": 50.354464285714286,
+          "stability_score": 0.26573968748418664,
+          "total_return": 0.2567540656691967,
+          "regime": "ALL",
+          "cap_bucket": "ALL",
+          "oos": true,
+          "created_at": "2026-11-13T10:28:25.613136Z"
+        },
+        "beat_share": 0.25,
+        "folds": [
+          {
+            "fold": 1,
+            "test": "2023-08-10->2024-06-06",
+            "sharpe": 2.305648344289263,
+            "bench_sharpe": 1.513425992998823,
+            "ret": 1.0638676346662121,
+            "trades": 8
+          },
+          {
+            "fold": 2,
+            "test": "2024-06-07->2025-03-26",
+            "sharpe": -0.12100749759164331,
+            "bench_sharpe": 0.14787484221740785,
+            "ret": -0.053099236400255156,
+            "trades": 5
+          },
+          {
+            "fold": 3,
+            "test": "2025-03-27->2026-01-19",
+            "sharpe": 0.6027164129834734,
+            "bench_sharpe": 0.9520693779831199,
+            "ret": 0.08969406878859298,
+            "trades": 7
+          },
+          {
+            "fold": 4,
+            "test": "2026-01-20->2026-11-13",
+            "sharpe": -0.45083862975051514,
+            "bench_sharpe": 0.04338440029255207,
+            "ret": -0.07344620437776317,
+            "trades": 3
+          }
+        ]
+      },
+      "success": false,
+      "created_at": "2026-11-13T10:28:25.616536+00:00"
     }
   ]
 }

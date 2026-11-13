@@ -26,7 +26,7 @@ def _synth_frames(n_sym=8, n=600, seed=0):
 
 def test_walkforward_runs_and_returns_report():
     frames, nifty, sectors = _synth_frames()
-    report = run_rolling_walkforward(frames, nifty, sectors, n_folds=3)
+    report = run_rolling_walkforward(frames, nifty, sectors, n_folds=3, vix_cash_threshold=None)
     assert report.metrics.strategy_id == "dual_momentum_nifty_gated"
     assert isinstance(report.promotable, bool)
     assert report.reason

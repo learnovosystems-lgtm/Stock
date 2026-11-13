@@ -65,12 +65,14 @@ def run_rolling_walkforward(
     nifty: pd.DataFrame,
     sectors: dict[str, str] | None = None,
     *,
+    india_vix: pd.DataFrame | None = None,
     n_folds: int = 4,
     train_frac: float = 0.6,
     lookback: int = 84,
     top_n: int = 3,
     rebalance_every: int = 42,
     nifty_sma_gate: int = 200,
+    vix_cash_threshold: float | None = 18.0,
     registry: StrategyRegistry | None = None,
 ) -> WalkForwardReport:
     """Expanding/rolling OOS folds on the gated dual-momentum book."""
@@ -143,6 +145,9 @@ def run_rolling_walkforward(
         nifty_train = nifty.loc[(nifty.index >= train_start) & (nifty.index <= train_end)]
         nifty_test = nifty.loc[(nifty.index >= warmup_start) & (nifty.index <= test_end)]
         nifty_bench = nifty.loc[(nifty.index >= test_start) & (nifty.index <= test_end)]
+        vix_test = None
+        if india_vix is not None and len(india_vix):
+            vix_test = india_vix.loc[(india_vix.index >= warmup_start) & (india_vix.index <= test_end)]
 
         # Fit-free strategy: params fixed; train used only for presence/liquidity filter
         liquid = {s for s, df in train_frames.items() if len(df) >= lookback + 20}
@@ -161,6 +166,8 @@ def run_rolling_walkforward(
             sector_neutral=True,
             strategy_id="dual_momentum_nifty_gated",
             trade_start=test_start,
+            india_vix=vix_test,
+            vix_cash_threshold=vix_cash_threshold,
         )
         bench = run_nifty_buyhold_benchmark(nifty_bench)
         fold_results.append(
@@ -257,6 +264,7 @@ def run_rolling_walkforward(
             "rebalance_every": rebalance_every,
             "top_n": top_n,
             "nifty_sma_gate": nifty_sma_gate,
+            "vix_cash_threshold": vix_cash_threshold,
         },
         result={
             "metrics": metrics.model_dump(mode="json"),
