@@ -83,7 +83,12 @@ class MarketScanner:
         sector_rets = sector_relative_returns(self.provider, SECTOR_INDEX)
         regime = self.regime_detector.detect(daily_map, sector_rets)
         nifty = self.provider.nifty()
+        india_vix = self.provider.india_vix()
+        from ati.research.gates import india_vix_elevated
+
         risk_on = nifty_above_sma(nifty, window=self.config.nifty_trend_sma)
+        if india_vix_elevated(india_vix, threshold=18.0):
+            risk_on = False
 
         if progress:
             gate = "ON" if risk_on else "OFF→cash bias"
@@ -125,6 +130,7 @@ class MarketScanner:
                 nifty_daily=nifty,
                 regime=regime,
                 sector_strength=float(sector_rets.get(inst.sector, 0.0)),
+                extras={"india_vix": india_vix},
             )
 
             raw_signals = []
@@ -240,8 +246,11 @@ class MarketScanner:
         ranked = rank_opportunities(opportunities)
         # Keep actionable + high-quality WAIT; drop NO_TRADE clutter unless debugging
         ranked = [o for o in ranked if o.signal.value in ("BUY", "WAIT", "SHORT")]
+        vix_off = india_vix_elevated(india_vix, threshold=18.0)
         gate_note = (
-            f"NIFTY>SMA{self.config.nifty_trend_sma}={'ON' if risk_on else 'OFF (cash bias)'}"
+            f"NIFTY>SMA{self.config.nifty_trend_sma}="
+            f"{'ON' if nifty_above_sma(nifty, window=self.config.nifty_trend_sma) else 'OFF'}; "
+            f"VIX<18={'OFF' if vix_off else 'ON'}; risk_on={'ON' if risk_on else 'OFF'}"
         )
         result = ScanResult(
             regime_notes=f"{regime.notes}; {gate_note}",

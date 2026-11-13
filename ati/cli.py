@@ -171,6 +171,7 @@ def backtest_baseline(
             version="1.1.0-lb84-rb42",
         )
     if strategy in ("dual-gated", "all"):
+        vix = provider.india_vix()
         _record(
             run_dual_momentum_baseline(
                 frames,
@@ -179,8 +180,10 @@ def backtest_baseline(
                 sectors=sectors,
                 sector_neutral=True,
                 strategy_id="dual_momentum_nifty_gated",
+                india_vix=vix,
+                vix_cash_threshold=18.0,
             ),
-            version="2.0.0-sma200-sectneu",
+            version="2.1.0-sma200-vix18",
         )
     if strategy in ("benchmark", "all"):
         _record(run_nifty_buyhold_benchmark(nifty), version="1.0.0")
@@ -259,7 +262,10 @@ def walkforward(
     frames = {k: v for k, v in frames.items() if v is not None and len(v) > 200}
     nifty = provider.nifty()
     sectors = {i.symbol: i.sector for i in uni}
-    report = run_rolling_walkforward(frames, nifty, sectors, n_folds=folds)
+    vix = provider.india_vix()
+    report = run_rolling_walkforward(
+        frames, nifty, sectors, india_vix=vix, n_folds=folds, vix_cash_threshold=18.0
+    )
     table = Table(title="Rolling walk-forward OOS folds")
     table.add_column("fold")
     table.add_column("test")

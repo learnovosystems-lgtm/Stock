@@ -7,7 +7,7 @@ from typing import Optional
 import pandas as pd
 
 from ati.models.opportunity import MarketRegime
-from ati.research.gates import nifty_above_sma
+from ati.research.gates import india_vix_elevated, nifty_above_sma
 from ati.strategies.base import RawSignal, Strategy, StrategyContext
 from ati.strategies.common import (
     atr_stop_long,
@@ -23,7 +23,7 @@ from ati.strategies.common import (
 class DualMomentumStrategy(Strategy):
     id = "dual_momentum_v2"
     family = "relative_strength"
-    version = "2.0.0"
+    version = "2.1.0"
 
     def suitable_regimes(self) -> set[MarketRegime]:
         return {MarketRegime.BULL, MarketRegime.SIDEWAYS}
@@ -34,6 +34,10 @@ class DualMomentumStrategy(Strategy):
             return None
         # Hard index trend gate — do not take new risk when NIFTY < SMA200
         if not nifty_above_sma(ctx.nifty_daily, window=200):
+            return None
+        # India VIX overlay — cash bias when fear elevated
+        vix = ctx.extras.get("india_vix")
+        if vix is not None and india_vix_elevated(vix, threshold=18.0):
             return None
 
         last = d.iloc[-1]

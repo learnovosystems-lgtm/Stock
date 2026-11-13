@@ -7,6 +7,19 @@ import pandas as pd
 from ati.indicators.technical import sma
 
 
+def india_vix_elevated(vix: pd.DataFrame | None, threshold: float = 18.0, at: pd.Timestamp | None = None) -> bool:
+    """True when India VIX is at/above threshold — risk-off overlay."""
+    if vix is None or vix.empty or "Close" not in vix.columns:
+        return False
+    close = vix["Close"].astype(float)
+    if at is not None:
+        close = close.loc[:at]
+    if close.empty:
+        return False
+    last = float(close.iloc[-1])
+    return not pd.isna(last) and last >= threshold
+
+
 def nifty_above_sma(nifty: pd.DataFrame | None, window: int = 200, at: pd.Timestamp | None = None) -> bool:
     """True when NIFTY close is above its SMA — risk-on gate."""
     if nifty is None or nifty.empty or "Close" not in nifty.columns:

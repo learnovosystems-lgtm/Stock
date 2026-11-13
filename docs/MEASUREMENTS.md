@@ -67,6 +67,18 @@ python3 -m ati.cli session eod
 python3 -m ati.cli paper-status
 ```
 
+## 2026-11-13 — Phase 4 (India VIX cash overlay)
+
+### Change
+When India VIX ≥ 18, flatten to cash (in addition to NIFTY SMA200 gate).
+
+### Full-sample (gated + VIX18)
+Sharpe **0.63**, return **+71%**, DD **−31%**, stability **0.60** (vs Phase-2 stability 0.29).  
+Still beats NIFTY BH Sharpe (0.55).
+
+### Walk-forward impact
+Threshold 18 does **not** move OOS fold stats materially (fold 4 remains weak). Lower thresholds (15–16) hurt fold 2. Keep **18** as live defensive overlay; promotion still blocked on OOS stability.
+
 ## Reproduce
 
 ```bash
