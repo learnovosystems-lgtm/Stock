@@ -410,3 +410,260 @@ def run_pullback_trend_baseline(
         trade_log=trade_log,
         stability_score=_stability(rets),
     )
+
+
+def run_dual_momentum_baseline(
+    frames: dict[str, pd.DataFrame],
+    nifty: pd.DataFrame | None = None,
+    *,
+    risk: RiskConfig | None = None,
+    initial_capital: float = 100_000.0,
+    lookback: int = 84,
+    top_n: int = 3,
+    rebalance_every: int = 42,
+    abs_mom_floor: float = 0.0,
+) -> BacktestResult:
+    """Low-turnover dual momentum (absolute + relative), ~bi-monthly rebalance.
+
+    Defaults (84/42/3) chosen from measured grid vs worse 126/21 defaults.
+    Still subject to promotion gates — not auto-production.
+    """
+    risk = risk or DEFAULT.risk
+    cost_rt = RiskEngine(risk).round_trip_cost_pct()
+
+    closes = {
+        sym: df["Close"].astype(float)
+        for sym, df in frames.items()
+        if df is not None and len(df) >= lookback + 40
+    }
+    empty = BacktestResult(
+        strategy_id="dual_momentum_baseline",
+        trades=0,
+        win_rate=0.0,
+        expectancy=0.0,
+        sharpe=0.0,
+        sortino=0.0,
+        max_drawdown=0.0,
+        profit_factor=0.0,
+        avg_holding_days=0.0,
+        total_return=0.0,
+        equity_curve=pd.Series(dtype=float),
+        trade_log=pd.DataFrame(),
+        stability_score=0.0,
+    )
+    if len(closes) < top_n + 2:
+        return empty
+
+    panel = pd.DataFrame(closes).sort_index().ffill()
+    nifty_close = None
+    if nifty is not None and len(nifty) > lookback:
+        nifty_close = nifty["Close"].astype(float).reindex(panel.index).ffill()
+
+    dates = list(panel.index)
+    cash = initial_capital
+    holdings: dict[str, float] = {}
+    entry_px: dict[str, float] = {}
+    entry_i: dict[str, int] = {}
+    trades: list[dict] = []
+    curve: list[tuple] = []
+    last_reb = -10_000
+
+    def portfolio_value(i: int) -> float:
+        dt = dates[i]
+        value = cash
+        for sym, sh in holdings.items():
+            value += sh * float(panel.iloc[i][sym])
+        return value
+
+    def close_position(sym: str, i: int, reason: str) -> None:
+        nonlocal cash
+        sh = holdings.pop(sym)
+        px = float(panel.iloc[i][sym])
+        sell = px * (1 - cost_rt / 2)
+        cash += sh * sell
+        e_px = entry_px.pop(sym)
+        e_i = entry_i.pop(sym)
+        buy = e_px * (1 + cost_rt / 2)
+        trades.append(
+            {
+                "symbol": sym,
+                "entry": buy,
+                "exit": sell,
+                "pnl": sh * (sell - buy),
+                "ret": sell / buy - 1.0,
+                "bars": max(1, i - e_i),
+                "reason": reason,
+            }
+        )
+
+    for i, dt in enumerate(dates):
+        equity = portfolio_value(i)
+        curve.append((dt, equity))
+        if i < lookback:
+            continue
+        if i - last_reb < rebalance_every:
+            continue
+
+        scores: dict[str, float] = {}
+        for sym in panel.columns:
+            px_now = float(panel.iloc[i][sym])
+            px_past = float(panel.iloc[i - lookback][sym])
+            if px_past <= 0 or pd.isna(px_now) or pd.isna(px_past):
+                continue
+            abs_mom = px_now / px_past - 1.0
+            if abs_mom <= abs_mom_floor:
+                continue
+            score = abs_mom
+            if nifty_close is not None:
+                n_now = float(nifty_close.iloc[i])
+                n_past = float(nifty_close.iloc[i - lookback])
+                if n_past > 0 and not pd.isna(n_now):
+                    score = abs_mom - (n_now / n_past - 1.0)
+            scores[sym] = score
+
+        target = [s for s, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
+        target_set = set(target)
+
+        for sym in list(holdings):
+            if sym not in target_set:
+                close_position(sym, i, "rebalance" if target else "cash")
+
+        equity = portfolio_value(i)
+        if not target:
+            last_reb = i
+            curve[-1] = (dt, equity)
+            continue
+
+        # Equal-weight remaining book: sell names already held that stay, rebuy to target weight
+        # Keep survivors; only buy missing names with free cash + optional trim.
+        n = len(target)
+        target_value = equity / n
+        # Trim overweight survivors into cash
+        for sym in list(holdings):
+            if sym not in target_set:
+                continue
+            px = float(panel.iloc[i][sym])
+            cur = holdings[sym] * px
+            if cur > target_value * 1.05:
+                sell_sh = (cur - target_value) / px
+                sell = px * (1 - cost_rt / 2)
+                cash += sell_sh * sell
+                holdings[sym] -= sell_sh
+
+        equity = portfolio_value(i)
+        target_value = equity / n
+        for sym in target:
+            px = float(panel.iloc[i][sym])
+            buy = px * (1 + cost_rt / 2)
+            desired_sh = target_value / buy
+            have = holdings.get(sym, 0.0)
+            if desired_sh > have + 1e-9:
+                need = desired_sh - have
+                cost = need * buy
+                if cost > cash:
+                    need = cash / buy
+                    cost = need * buy
+                if need <= 0:
+                    continue
+                cash -= cost
+                holdings[sym] = have + need
+                if sym not in entry_px:
+                    entry_px[sym] = px
+                    entry_i[sym] = i
+
+        last_reb = i
+        curve[-1] = (dt, portfolio_value(i))
+
+    if holdings:
+        i = len(dates) - 1
+        for sym in list(holdings):
+            close_position(sym, i, "eod_flatten")
+        curve[-1] = (dates[-1], cash)
+
+    trade_log = pd.DataFrame(trades)
+    eq = pd.Series({d: v for d, v in curve}).sort_index()
+    if trade_log.empty or eq.empty:
+        return empty
+
+    rets = trade_log["ret"].values
+    daily = eq.pct_change().dropna()
+    sharpe = float(daily.mean() / daily.std() * np.sqrt(252)) if daily.std() > 0 else 0.0
+    downside = daily[daily < 0]
+    sortino = float(daily.mean() / downside.std() * np.sqrt(252)) if len(downside) and downside.std() > 0 else 0.0
+    wins = rets[rets > 0]
+    losses = rets[rets <= 0]
+    pf = float(wins.sum() / abs(losses.sum())) if len(losses) and abs(losses.sum()) > 0 else 99.0
+    return BacktestResult(
+        strategy_id="dual_momentum_baseline",
+        trades=len(trade_log),
+        win_rate=float((rets > 0).mean()),
+        expectancy=float(rets.mean()),
+        sharpe=sharpe,
+        sortino=sortino,
+        max_drawdown=_max_drawdown(eq),
+        profit_factor=pf if np.isfinite(pf) else 99.0,
+        avg_holding_days=float(trade_log["bars"].mean()),
+        total_return=float(eq.iloc[-1] / eq.iloc[0] - 1) if len(eq) else 0.0,
+        equity_curve=eq,
+        trade_log=trade_log,
+        stability_score=_stability(rets),
+    )
+
+
+def run_nifty_buyhold_benchmark(
+    nifty: pd.DataFrame,
+    *,
+    initial_capital: float = 100_000.0,
+) -> BacktestResult:
+    """Passive NIFTY total-path benchmark (adjusted close proxy)."""
+    if nifty is None or len(nifty) < 50:
+        return BacktestResult(
+            strategy_id="nifty_buyhold_benchmark",
+            trades=0,
+            win_rate=0.0,
+            expectancy=0.0,
+            sharpe=0.0,
+            sortino=0.0,
+            max_drawdown=0.0,
+            profit_factor=0.0,
+            avg_holding_days=0.0,
+            total_return=0.0,
+            equity_curve=pd.Series(dtype=float),
+            trade_log=pd.DataFrame(),
+            stability_score=0.0,
+        )
+    close = nifty["Close"].astype(float).dropna()
+    eq = initial_capital * (close / float(close.iloc[0]))
+    daily = eq.pct_change().dropna()
+    sharpe = float(daily.mean() / daily.std() * np.sqrt(252)) if daily.std() > 0 else 0.0
+    downside = daily[daily < 0]
+    sortino = float(daily.mean() / downside.std() * np.sqrt(252)) if len(downside) and downside.std() > 0 else 0.0
+    ret = float(eq.iloc[-1] / eq.iloc[0] - 1)
+    trade_log = pd.DataFrame(
+        [
+            {
+                "symbol": "^NSEI",
+                "entry": float(close.iloc[0]),
+                "exit": float(close.iloc[-1]),
+                "pnl": float(eq.iloc[-1] - initial_capital),
+                "ret": ret,
+                "bars": len(close),
+                "reason": "benchmark",
+            }
+        ]
+    )
+    return BacktestResult(
+        strategy_id="nifty_buyhold_benchmark",
+        trades=1,
+        win_rate=1.0 if ret > 0 else 0.0,
+        expectancy=ret,
+        sharpe=sharpe,
+        sortino=sortino,
+        max_drawdown=_max_drawdown(eq),
+        profit_factor=99.0 if ret > 0 else 0.0,
+        avg_holding_days=float(len(close)),
+        total_return=ret,
+        equity_curve=eq,
+        trade_log=trade_log,
+        stability_score=0.8 if ret > 0 else 0.2,
+    )

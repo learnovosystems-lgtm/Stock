@@ -75,6 +75,101 @@
       "oos": false,
       "created_at": "2026-11-13T08:30:14.560226",
       "production": false
+    },
+    {
+      "strategy_id": "breakout_momentum_baseline",
+      "version": "1.1.0",
+      "sample_count": 42,
+      "win_rate": 0.40476190476190477,
+      "expectancy": -0.004686796168484971,
+      "sharpe": -0.41675217304197487,
+      "sortino": -0.42843045326227025,
+      "max_drawdown": -0.11997353697574431,
+      "profit_factor": 0.8000582365809531,
+      "avg_holding_days": 15.333333333333334,
+      "stability_score": 0.37805766255526535,
+      "total_return": -0.05462352139896798,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T09:05:21.134518",
+      "production": false
+    },
+    {
+      "strategy_id": "pullback_trend_baseline",
+      "version": "1.1.0",
+      "sample_count": 57,
+      "win_rate": 0.38596491228070173,
+      "expectancy": -0.00019256735311837833,
+      "sharpe": -0.01756816704086643,
+      "sortino": -0.020821896162326724,
+      "max_drawdown": -0.14186660059342782,
+      "profit_factor": 0.9922002847291614,
+      "avg_holding_days": 14.157894736842104,
+      "stability_score": 0.015078999330642365,
+      "total_return": -0.008838835866408656,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T09:05:21.899072",
+      "production": false
+    },
+    {
+      "strategy_id": "dual_momentum_baseline",
+      "version": "1.1.0",
+      "sample_count": 26,
+      "win_rate": 0.23076923076923078,
+      "expectancy": -0.03257413428429007,
+      "sharpe": -0.9128991202480689,
+      "sortino": -1.041180332291989,
+      "max_drawdown": -0.388274880277762,
+      "profit_factor": 0.36722330774654444,
+      "avg_holding_days": 42.46153846153846,
+      "stability_score": 0.32158578930425963,
+      "total_return": -0.26293553558547156,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T09:05:21.943594",
+      "production": false
+    },
+    {
+      "strategy_id": "dual_momentum_baseline",
+      "version": "1.1.0-lb84-rb42",
+      "sample_count": 22,
+      "win_rate": 0.5454545454545454,
+      "expectancy": 0.0019004233208550442,
+      "sharpe": 0.09678394674077243,
+      "sortino": 0.12909556527149688,
+      "max_drawdown": -0.24480442953271475,
+      "profit_factor": 1.0669879410747662,
+      "avg_holding_days": 55.90909090909091,
+      "stability_score": 0.07872799544772753,
+      "total_return": 0.00370088275680458,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T09:06:47.156849",
+      "production": false
+    },
+    {
+      "strategy_id": "nifty_buyhold_benchmark",
+      "version": "1.0.0",
+      "sample_count": 1,
+      "win_rate": 1.0,
+      "expectancy": 0.06509175663479927,
+      "sharpe": 0.3071991389366058,
+      "sortino": 0.474148636841816,
+      "max_drawdown": -0.1556010444341479,
+      "profit_factor": 99.0,
+      "avg_holding_days": 494.0,
+      "stability_score": 0.8,
+      "total_return": 0.06509175663479927,
+      "regime": "ALL",
+      "cap_bucket": "ALL",
+      "oos": false,
+      "created_at": "2026-11-13T09:06:50.474946",
+      "production": false
     }
   ],
   "experiments": [
@@ -1517,6 +1612,702 @@
       },
       "success": false,
       "created_at": "2026-11-13T08:29:13.758239+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 84,
+        "top_n": 2,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb84_n2_rb21_f0.0",
+        "sample_count": 6,
+        "win_rate": 0.16666666666666666,
+        "expectancy": -0.019235299680009366,
+        "sharpe": -0.661982456573343,
+        "sortino": -0.6355234954545237,
+        "max_drawdown": -0.17718712010784288,
+        "profit_factor": 0.4675382199035568,
+        "avg_holding_days": 21.666666666666668,
+        "stability_score": 0.21039037548924425,
+        "total_return": -0.06240232140958135,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.735028"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.735437+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 84,
+        "top_n": 2,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb84_n2_rb21_f0.02",
+        "sample_count": 6,
+        "win_rate": 0.16666666666666666,
+        "expectancy": -0.019235299680009366,
+        "sharpe": -0.661982456573343,
+        "sortino": -0.6355234954545237,
+        "max_drawdown": -0.17718712010784288,
+        "profit_factor": 0.4675382199035568,
+        "avg_holding_days": 21.666666666666668,
+        "stability_score": 0.21039037548924425,
+        "total_return": -0.06240232140958135,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.771483"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.771814+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 84,
+        "top_n": 2,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb84_n2_rb42_f0.0",
+        "sample_count": 4,
+        "win_rate": 0.5,
+        "expectancy": 0.004941139614155543,
+        "sharpe": 0.07291350839834787,
+        "sortino": 0.09622534117299857,
+        "max_drawdown": -0.11673457877102023,
+        "profit_factor": 1.1116126256770227,
+        "avg_holding_days": 32.5,
+        "stability_score": 0.3,
+        "total_return": 0.0011678075522636444,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.799587"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.799914+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 84,
+        "top_n": 2,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb84_n2_rb42_f0.02",
+        "sample_count": 4,
+        "win_rate": 0.5,
+        "expectancy": 0.004941139614155543,
+        "sharpe": 0.07291350839834787,
+        "sortino": 0.09622534117299857,
+        "max_drawdown": -0.11673457877102023,
+        "profit_factor": 1.1116126256770227,
+        "avg_holding_days": 32.5,
+        "stability_score": 0.3,
+        "total_return": 0.0011678075522636444,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.827681"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.828010+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 84,
+        "top_n": 3,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb84_n3_rb21_f0.0",
+        "sample_count": 9,
+        "win_rate": 0.2222222222222222,
+        "expectancy": -0.022402823212668857,
+        "sharpe": -0.8104205476648262,
+        "sortino": -0.81347503734782,
+        "max_drawdown": -0.18099911746558905,
+        "profit_factor": 0.3764129614282689,
+        "avg_holding_days": 21.666666666666668,
+        "stability_score": 0.27982454478365365,
+        "total_return": -0.07019134100057944,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.867811"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.868139+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 84,
+        "top_n": 3,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb84_n3_rb21_f0.02",
+        "sample_count": 9,
+        "win_rate": 0.2222222222222222,
+        "expectancy": -0.022402823212668857,
+        "sharpe": -0.8104205476648262,
+        "sortino": -0.81347503734782,
+        "max_drawdown": -0.18099911746558905,
+        "profit_factor": 0.3764129614282689,
+        "avg_holding_days": 21.666666666666668,
+        "stability_score": 0.27982454478365365,
+        "total_return": -0.07019134100057944,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.907477"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.907810+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 84,
+        "top_n": 3,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb84_n3_rb42_f0.0",
+        "sample_count": 6,
+        "win_rate": 0.5,
+        "expectancy": 0.009488251846802706,
+        "sharpe": 0.16945560169463755,
+        "sortino": 0.24724599841242018,
+        "max_drawdown": -0.12338204737870406,
+        "profit_factor": 1.1943232954904437,
+        "avg_holding_days": 32.5,
+        "stability_score": 0.06834861395952188,
+        "total_return": 0.007587006076432035,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.939114"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.939458+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 84,
+        "top_n": 3,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb84_n3_rb42_f0.02",
+        "sample_count": 6,
+        "win_rate": 0.5,
+        "expectancy": 0.009488251846802706,
+        "sharpe": 0.16945560169463755,
+        "sortino": 0.24724599841242018,
+        "max_drawdown": -0.12338204737870406,
+        "profit_factor": 1.1943232954904437,
+        "avg_holding_days": 32.5,
+        "stability_score": 0.06834861395952188,
+        "total_return": 0.007587006076432035,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.970434"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.970827+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 126,
+        "top_n": 2,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb126_n2_rb21_f0.0",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:24.992167"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:24.992510+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 126,
+        "top_n": 2,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb126_n2_rb21_f0.02",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.013670"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.014022+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 126,
+        "top_n": 2,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb126_n2_rb42_f0.0",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.030231"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.030599+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 126,
+        "top_n": 2,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb126_n2_rb42_f0.02",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.047065"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.047426+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 126,
+        "top_n": 3,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb126_n3_rb21_f0.0",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.071429"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.071792+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 126,
+        "top_n": 3,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb126_n3_rb21_f0.02",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.095325"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.095686+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 126,
+        "top_n": 3,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb126_n3_rb42_f0.0",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.114663"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.115026+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 126,
+        "top_n": 3,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb126_n3_rb42_f0.02",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.133687"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.134055+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 189,
+        "top_n": 2,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb189_n2_rb21_f0.0",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.151323"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.151708+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 189,
+        "top_n": 2,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb189_n2_rb21_f0.02",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.168695"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.169071+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 189,
+        "top_n": 2,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb189_n2_rb42_f0.0",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.182772"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.183136+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 189,
+        "top_n": 2,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb189_n2_rb42_f0.02",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.196481"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.196853+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 189,
+        "top_n": 3,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb189_n3_rb21_f0.0",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.216236"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.216615+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 189,
+        "top_n": 3,
+        "rebalance_every": 21,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb189_n3_rb21_f0.02",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.236107"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.236491+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 189,
+        "top_n": 3,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.0
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb189_n3_rb42_f0.0",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.251906"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.252290+00:00"
+    },
+    {
+      "name": "dual_momentum_search",
+      "params": {
+        "lookback": 189,
+        "top_n": 3,
+        "rebalance_every": 42,
+        "abs_mom_floor": 0.02
+      },
+      "result": {
+        "strategy_id": "dual_momentum_baseline",
+        "version": "lb189_n3_rb42_f0.02",
+        "sample_count": 0,
+        "win_rate": 0.0,
+        "expectancy": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "profit_factor": 0.0,
+        "avg_holding_days": 0.0,
+        "stability_score": 0.0,
+        "total_return": 0.0,
+        "regime": "ALL",
+        "cap_bucket": "ALL",
+        "oos": true,
+        "created_at": "2026-11-13T09:05:25.267348"
+      },
+      "success": false,
+      "created_at": "2026-11-13T09:05:25.267737+00:00"
     }
   ]
 }

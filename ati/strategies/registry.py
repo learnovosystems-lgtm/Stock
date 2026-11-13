@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ati.strategies.base import Strategy
 from ati.strategies.breakout import BreakoutStrategy
+from ati.strategies.dual_momentum import DualMomentumStrategy
 from ati.strategies.mean_reversion import MeanReversionStrategy
 from ati.strategies.momentum import MomentumStrategy
 from ati.strategies.multi_factor import MultiFactorStrategy
@@ -15,6 +16,7 @@ from ati.strategies.vol_expansion import VolatilityExpansionStrategy
 
 def all_strategies() -> list[Strategy]:
     return [
+        DualMomentumStrategy(),
         MomentumStrategy(),
         TrendFollowingStrategy(),
         BreakoutStrategy(),

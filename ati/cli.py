@@ -17,7 +17,12 @@ from ati.ml.train import train_from_frames
 from ati.models.opportunity import StrategyMetrics
 from ati.ops.session import is_market_open, run_eod, run_intrasession_once
 from ati.paper.portfolio import PaperBroker
-from ati.research.backtest import run_breakout_momentum_baseline, run_pullback_trend_baseline
+from ati.research.backtest import (
+    run_breakout_momentum_baseline,
+    run_dual_momentum_baseline,
+    run_nifty_buyhold_benchmark,
+    run_pullback_trend_baseline,
+)
 from ati.research.laboratory import ResearchLaboratory
 from ati.research.registry import StrategyRegistry
 from ati.scanner.market_scanner import MarketScanner
@@ -97,22 +102,18 @@ def scan(
 @app.command("backtest-baseline")
 def backtest_baseline(
     limit: int = typer.Option(30, help="Symbols to include"),
-    strategy: str = typer.Option("both", help="breakout|pullback|both"),
+    strategy: str = typer.Option("all", help="breakout|pullback|dual|benchmark|all"),
 ):
-    """Measure Phase-0 baselines and record metrics (honest, including losses)."""
+    """Measure baselines and record metrics (honest, including losses)."""
     ensure_dirs()
     provider = MarketDataProvider()
     uni = load_universe()[:limit]
     frames = provider.get_many_daily([i.symbol for i in uni])
     frames = {k: v for k, v in frames.items() if v is not None and len(v) > 100}
-    runners = []
-    if strategy in ("breakout", "both"):
-        runners.append(run_breakout_momentum_baseline)
-    if strategy in ("pullback", "both"):
-        runners.append(run_pullback_trend_baseline)
+    nifty = provider.nifty()
     registry = StrategyRegistry()
-    for runner in runners:
-        result = runner(frames)
+
+    def _record(result, version: str = "1.1.0"):
         payload = {
             "strategy_id": result.strategy_id,
             "trades": result.trades,
@@ -130,7 +131,7 @@ def backtest_baseline(
         registry.record_metrics(
             StrategyMetrics(
                 strategy_id=result.strategy_id,
-                version="1.0.0",
+                version=version,
                 sample_count=result.trades,
                 win_rate=result.win_rate,
                 expectancy=result.expectancy,
@@ -145,38 +146,60 @@ def backtest_baseline(
             )
         )
 
+    if strategy in ("breakout", "all"):
+        _record(run_breakout_momentum_baseline(frames))
+    if strategy in ("pullback", "all"):
+        _record(run_pullback_trend_baseline(frames))
+    if strategy in ("dual", "all"):
+        _record(run_dual_momentum_baseline(frames, nifty), version="1.1.0-lb84-rb42")
+    if strategy in ("benchmark", "all"):
+        _record(run_nifty_buyhold_benchmark(nifty), version="1.0.0")
+
 
 @app.command("research")
-def research(limit: int = typer.Option(25, help="Symbols for lab search")):
+def research(
+    limit: int = typer.Option(25, help="Symbols for lab search"),
+    family: str = typer.Option("dual", help="breakout|dual|all"),
+):
     """Run research laboratory parameter search with walk-forward OOS validation."""
     ensure_dirs()
     provider = MarketDataProvider()
     uni = load_universe()[:limit]
     frames = provider.get_many_daily([i.symbol for i in uni])
     frames = {k: v for k, v in frames.items() if v is not None and len(v) > 120}
+    nifty = provider.nifty()
     lab = ResearchLaboratory()
-    results = lab.search_breakout_params(frames)
-    table = Table(title="Research lab — OOS candidates")
-    table.add_column("params")
-    table.add_column("trades")
-    table.add_column("sharpe")
-    table.add_column("stability")
-    table.add_column("candidate")
-    for r in results[:15]:
-        table.add_row(
-            str(r.params),
-            str(r.metrics.sample_count),
-            f"{r.metrics.sharpe:.3f}",
-            f"{r.metrics.stability_score:.3f}",
-            "yes" if r.promoted_candidate else "no",
-        )
-    console.print(table)
-    # Attempt promote best candidate
-    for r in results:
-        if r.promoted_candidate:
-            ok = lab.registry.promote("breakout_param_search", r.metrics.version)
-            console.print(f"Promote {r.metrics.version}: {'OK' if ok else 'rejected by gates'}")
-            break
+    batches: list[tuple[str, list]] = []
+    if family in ("breakout", "all"):
+        batches.append(("breakout_param_search", lab.search_breakout_params(frames)))
+    if family in ("dual", "all"):
+        batches.append(("dual_momentum_baseline", lab.search_dual_momentum_params(frames, nifty)))
+
+    for strategy_id, results in batches:
+        table = Table(title=f"Research lab — {strategy_id} OOS")
+        table.add_column("params")
+        table.add_column("trades")
+        table.add_column("sharpe")
+        table.add_column("stability")
+        table.add_column("ret")
+        table.add_column("candidate")
+        for r in results[:12]:
+            table.add_row(
+                str(r.params),
+                str(r.metrics.sample_count),
+                f"{r.metrics.sharpe:.3f}",
+                f"{r.metrics.stability_score:.3f}",
+                f"{r.metrics.total_return:.3f}",
+                "yes" if r.promoted_candidate else "no",
+            )
+        console.print(table)
+        for r in results:
+            if r.promoted_candidate:
+                ok = lab.registry.promote(strategy_id, r.metrics.version)
+                console.print(f"Promote {strategy_id} {r.metrics.version}: {'OK' if ok else 'rejected by gates'}")
+                break
+        else:
+            console.print(f"[yellow]No {strategy_id} candidate cleared promotion gates.[/yellow]")
 
 
 @app.command("train-ml")

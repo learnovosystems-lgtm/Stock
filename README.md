@@ -27,14 +27,14 @@ python3 -m ati.cli fetch-data --limit 40
 # Regime
 python3 -m ati.cli regime
 
-# Measure baseline
-python3 -m ati.cli backtest-baseline --limit 30
+# Measure baselines (breakout / pullback / dual-momentum / NIFTY benchmark)
+python3 -m ati.cli backtest-baseline --limit 40 --strategy all
 
 # Train ML reliability model
 python3 -m ati.cli train-ml --limit 40
 
-# Research lab (walk-forward)
-python3 -m ati.cli research --limit 25
+# Research lab (walk-forward dual-momentum by default)
+python3 -m ati.cli research --limit 30 --family dual
 
 # Scan for opportunities (real data)
 python3 -m ati.cli scan --limit 40 --top 5

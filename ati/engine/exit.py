@@ -42,16 +42,25 @@ class ExitAction:
     message: str
 
 
-def build_exit_plan(entry: float, stop: float, t1: float, t2: float, t3: float) -> ExitPlan:
+def build_exit_plan(
+    entry: float,
+    stop: float,
+    t1: float,
+    t2: float,
+    t3: float,
+    *,
+    max_hold_days: int = 45,
+) -> ExitPlan:
+    """Cost-aware default hold extended after measured high-turnover drag."""
     if stop >= entry:
         raise ValueError("Long stop must be below entry")
     return ExitPlan(
         initial_stop=stop,
         current_stop=stop,
         targets=[t1, t2, t3],
-        partial_fractions=[0.4, 0.3, 0.3],
-        max_hold_days=30,
-        notes="ATR/swing hybrid stop with partial profit booking; stop never widens",
+        partial_fractions=[0.35, 0.35, 0.30],
+        max_hold_days=max_hold_days,
+        notes="ATR/swing hybrid stop with partial profit booking; stop never widens; longer hold to cut costs",
     )
 
 
