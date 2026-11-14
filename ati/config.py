@@ -25,11 +25,13 @@ class RiskConfig:
     min_reward_risk: float = 2.0
     max_portfolio_exposure_pct: float = 0.95
     max_positions_per_sector: int = 1
-    # Approximate NSE cash equity costs (delivery-oriented paper model)
-    brokerage_pct: float = 0.0003
-    stt_sell_pct: float = 0.001
+    # Market impact only — statutory/brokerage fees live in ChargeEngine schedules.
+    # Legacy flat % fields retained for backward-compatible tests/readers; RiskEngine
+    # no longer mixes them into execution prices when ChargeEngine is used.
     slippage_pct: float = 0.0005
-    other_charges_pct: float = 0.0002
+    brokerage_pct: float = 0.0003  # deprecated: use ChargeEngine
+    stt_sell_pct: float = 0.001  # deprecated: use ChargeEngine
+    other_charges_pct: float = 0.0002  # deprecated: use ChargeEngine
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,10 @@ class MarketConfig:
 class AppConfig:
     risk: RiskConfig = field(default_factory=RiskConfig)
     market: MarketConfig = field(default_factory=MarketConfig)
+    # ChargeEngine broker profile (fyers | zerodha). Paper default = fyers.
+    # Zerodha rates must never be applied when this is fyers.
+    charges_broker: str = "fyers"
+    default_segment: str = "equity_delivery"
     lookback_days_daily: int = 1300  # ~5y trading days for expanded research
     lookback_days_intraday: int = 10
     min_avg_volume: float = 150_000.0

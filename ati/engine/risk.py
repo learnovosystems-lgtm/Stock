@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ati.config import RiskConfig, DEFAULT
+from ati.engine.charges import ChargeEngine, default_charge_engine
+from ati.models.charges import Segment, Side
 
 
 @dataclass
@@ -26,8 +28,14 @@ class PositionSizeResult:
 
 
 class RiskEngine:
-    def __init__(self, config: RiskConfig | None = None):
+    def __init__(
+        self,
+        config: RiskConfig | None = None,
+        *,
+        charges: ChargeEngine | None = None,
+    ):
         self.config = config or DEFAULT.risk
+        self.charges = charges or default_charge_engine(slippage_pct=self.config.slippage_pct)
 
     def risk_budget_per_trade(self, equity: float) -> float:
         return equity * self.config.risk_per_trade_pct
@@ -81,18 +89,20 @@ class RiskEngine:
         actual_risk = qty * stop_dist
         return PositionSizeResult(qty, capital, actual_risk, True, "OK")
 
-    def round_trip_cost_pct(self) -> float:
-        c = self.config
-        # buy: brokerage + other; sell: brokerage + STT + other; + 2x slippage
-        return (
-            2 * c.brokerage_pct
-            + c.stt_sell_pct
-            + 2 * c.other_charges_pct
-            + 2 * c.slippage_pct
-        )
+    def round_trip_cost_pct(
+        self,
+        *,
+        segment: Segment | str | None = None,
+        price: float = 1000.0,
+        qty: float = 100.0,
+    ) -> float:
+        seg = segment or DEFAULT.default_segment
+        return self.charges.round_trip_cost_pct(price=price, qty=qty, segment=seg, include_slippage=True)
 
     def apply_buy_slippage(self, price: float) -> float:
-        return price * (1 + self.config.slippage_pct + self.config.brokerage_pct)
+        """Slippage-only buy price (fees via ChargeEngine.economics_for_fill)."""
+        return self.charges.slipped_price(price, Side.BUY)
 
     def apply_sell_slippage(self, price: float) -> float:
-        return price * (1 - self.config.slippage_pct - self.config.brokerage_pct - self.config.stt_sell_pct)
+        """Slippage-only sell price (fees via ChargeEngine.economics_for_fill)."""
+        return self.charges.slipped_price(price, Side.SELL)

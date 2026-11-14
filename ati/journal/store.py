@@ -13,7 +13,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from ati.config import STATE_DIR, ensure_dirs
+from ati.config import STATE_DIR, DEFAULT, ensure_dirs
+from ati.engine.charges import default_charge_engine
+from ati.models.charges import Segment, Side
 
 
 def _db_path() -> Path:
@@ -65,6 +67,17 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_sug_stock ON suggestions(stock);
             """
         )
+        cols = {r[1] for r in cx.execute("PRAGMA table_info(journal)").fetchall()}
+        for col, decl in (
+            ("gross_pnl", "REAL"),
+            ("fees", "REAL"),
+            ("net_pnl", "REAL"),
+            ("segment", "TEXT"),
+            ("schedule_id", "TEXT"),
+            ("charges_json", "TEXT"),
+        ):
+            if col not in cols:
+                cx.execute(f"ALTER TABLE journal ADD COLUMN {col} {decl}")
 
 
 def _now() -> datetime:
@@ -217,32 +230,98 @@ def journal_update_entry(journal_id: str, entry_price: float) -> None:
         cx.execute("UPDATE journal SET entry_price=? WHERE id=? AND status='open'", (entry_price, journal_id))
 
 
-def journal_close(journal_id: str, exit_price: float, notes: str = "") -> dict[str, Any]:
+def journal_close(
+    journal_id: str,
+    exit_price: float,
+    notes: str = "",
+    *,
+    segment: str | None = None,
+    apply_slippage: bool = False,
+) -> dict[str, Any]:
+    """Close a journal lot with ChargeEngine net P&L.
+
+    Manual journal prices are treated as already-executed (apply_slippage=False)
+    unless the caller opts in. Fees always apply for the configured broker.
+    """
     init_db()
+    seg = Segment(segment or DEFAULT.default_segment)
+    engine = default_charge_engine()
+    session = engine.new_session()
     with _conn() as cx:
         row = cx.execute("SELECT * FROM journal WHERE id=?", (journal_id,)).fetchone()
         if not row:
             raise ValueError("journal id not found")
-        pnl = (exit_price - row["entry_price"]) * row["qty"]
-        pnl_pct = exit_price / row["entry_price"] - 1.0 if row["entry_price"] else 0.0
+        qty = float(row["qty"])
+        entry = float(row["entry_price"])
+        stock = str(row["stock"])
+        buy = engine.economics_for_fill(
+            side=Side.BUY,
+            qty=qty,
+            raw_price=entry,
+            segment=seg,
+            apply_slippage=apply_slippage,
+            session=session,
+            order_id=f"journal-buy-{journal_id}",
+            symbol=stock,
+            trade_date=row["entry_at"],
+        )
+        sell = engine.economics_for_fill(
+            side=Side.SELL,
+            qty=qty,
+            raw_price=float(exit_price),
+            segment=seg,
+            apply_slippage=apply_slippage,
+            session=session,
+            order_id=f"journal-sell-{journal_id}",
+            symbol=stock,
+            trade_date=_now().isoformat(),
+        )
+        rt = engine.reconcile_round_trip(buy=buy, sells=[sell])
+        gross = (float(exit_price) - entry) * qty
+        fees = rt.total_fees
+        net = rt.net_pnl
+        pnl_pct = net / (entry * qty) if entry and qty else 0.0
+        charges_blob = json.dumps({"buy": buy.charges.to_dict(), "sell": sell.charges.to_dict()})
         cx.execute(
             """
-            UPDATE journal SET exit_price=?, exit_at=?, pnl=?, pnl_pct=?, notes=COALESCE(?, notes), status='closed'
+            UPDATE journal SET exit_price=?, exit_at=?, pnl=?, pnl_pct=?, notes=COALESCE(?, notes),
+                   status='closed', gross_pnl=?, fees=?, net_pnl=?, segment=?, schedule_id=?, charges_json=?
             WHERE id=?
             """,
-            (exit_price, _now().isoformat(), pnl, pnl_pct, notes or None, journal_id),
+            (
+                exit_price,
+                _now().isoformat(),
+                net,
+                pnl_pct,
+                notes or None,
+                gross,
+                fees,
+                net,
+                seg.value,
+                buy.charges.schedule_id,
+                charges_blob,
+                journal_id,
+            ),
         )
-        # Link suggestion outcome if present
         if row["suggestion_id"]:
-            outcome = "hit_target" if pnl > 0 else "hit_sl"
+            outcome = "hit_target" if net > 0 else "hit_sl"
             cx.execute(
                 """
                 UPDATE suggestions SET status=?, outcome=?, outcome_at=?, outcome_note=?
                 WHERE id=?
                 """,
-                (outcome, outcome, _now().isoformat(), f"journal close pnl={pnl:.2f}", row["suggestion_id"]),
+                (outcome, outcome, _now().isoformat(), f"journal close net={net:.2f}", row["suggestion_id"]),
             )
-        return {"id": journal_id, "pnl": round(pnl, 2), "pnl_pct": round(pnl_pct, 4), "status": "closed"}
+        return {
+            "id": journal_id,
+            "pnl": round(net, 2),
+            "gross_pnl": round(gross, 2),
+            "fees": round(fees, 2),
+            "net_pnl": round(net, 2),
+            "pnl_pct": round(pnl_pct, 4),
+            "status": "closed",
+            "schedule_id": buy.charges.schedule_id,
+        }
 
 
 def list_journal(limit: int = 100) -> list[dict[str, Any]]:
@@ -304,11 +383,26 @@ def performance_stats() -> dict[str, Any]:
         expired = count("expired")
         closed_j = cx.execute("SELECT COUNT(*) c FROM journal WHERE status='closed'").fetchone()["c"]
         open_j = cx.execute("SELECT COUNT(*) c FROM journal WHERE status='open'").fetchone()["c"]
-        pnl = cx.execute("SELECT COALESCE(SUM(pnl),0) s FROM journal WHERE status='closed'").fetchone()["s"]
-        wins = cx.execute("SELECT COUNT(*) c FROM journal WHERE status='closed' AND pnl>0").fetchone()["c"]
-        losses = cx.execute("SELECT COUNT(*) c FROM journal WHERE status='closed' AND pnl<=0").fetchone()["c"]
+        pnl = cx.execute(
+            "SELECT COALESCE(SUM(COALESCE(net_pnl, pnl)),0) s FROM journal WHERE status='closed'"
+        ).fetchone()["s"]
+        fees = cx.execute(
+            "SELECT COALESCE(SUM(fees),0) s FROM journal WHERE status='closed'"
+        ).fetchone()["s"]
+        gross = cx.execute(
+            "SELECT COALESCE(SUM(COALESCE(gross_pnl, pnl)),0) s FROM journal WHERE status='closed'"
+        ).fetchone()["s"]
+        wins = cx.execute(
+            "SELECT COUNT(*) c FROM journal WHERE status='closed' AND COALESCE(net_pnl, pnl)>0"
+        ).fetchone()["c"]
+        losses = cx.execute(
+            "SELECT COUNT(*) c FROM journal WHERE status='closed' AND COALESCE(net_pnl, pnl)<=0"
+        ).fetchone()["c"]
     decided = hit_t + hit_sl
     win_rate = (hit_t / decided) if decided else None
+    from ati.engine.charges import default_charge_engine
+
+    info = default_charge_engine().schedule_info()
     return {
         "suggestions_live": live,
         "suggestions_hit_target": hit_t,
@@ -320,6 +414,10 @@ def performance_stats() -> dict[str, Any]:
         "journal_wins": wins,
         "journal_losses": losses,
         "journal_realized_pnl": round(float(pnl), 2),
+        "journal_realized_gross": round(float(gross), 2),
+        "journal_realized_fees": round(float(fees), 2),
+        "journal_realized_net": round(float(pnl), 2),
+        "charges": info,
         "successful": hit_t + wins,
         "failed": hit_sl + losses,
         "live": live + open_j,

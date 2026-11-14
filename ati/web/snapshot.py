@@ -10,6 +10,7 @@ from typing import Any
 from ati.config import REPORTS_DIR, ensure_dirs
 from ati.data.provider import MarketDataProvider
 from ati.data.universe import load_universe
+from ati.engine.charges import default_charge_engine
 from ati.engine.suggestion_quality import annotate_opportunity, enrich_opportunity_dict
 from ati.journal.store import (
     evaluate_hits_against_prices,
@@ -25,12 +26,31 @@ from ati.scanner.market_scanner import MarketScanner
 
 
 def _mtm_positions(broker, provider: MarketDataProvider) -> list[dict[str, Any]]:
+    from ati.engine.charges import default_charge_engine
+    from ati.models.charges import Segment, Side
+
+    charges = getattr(broker, "charges", None) or default_charge_engine()
+    segment = getattr(broker, "segment", Segment.EQUITY_DELIVERY)
     out = []
     for p in broker.positions():
         sym = p.symbol if p.symbol.endswith(".NS") else p.symbol + ".NS"
         df = provider.get_daily(sym)
         last = float(df["Close"].iloc[-1]) if df is not None and len(df) else p.entry
-        pnl = (last - p.entry) * p.qty * p.remaining_frac
+        qty_open = p.qty * p.remaining_frac
+        entry_fee_left = float(getattr(p, "entry_fees", 0.0) or 0.0)
+        # Independent estimate — must NOT mutate paper charge_session / DP ledger
+        est_sell = charges.estimate_economics_for_fill(
+            side=Side.SELL,
+            qty=qty_open,
+            raw_price=last,
+            segment=segment,
+            apply_slippage=True,
+            symbol=p.symbol,
+        )
+        gross_mark = (last - p.entry) * qty_open
+        gross_slipped = (est_sell.exec_price - p.entry) * qty_open
+        exit_fees_est = est_sell.total_fees
+        est_net = gross_slipped - exit_fees_est - entry_fee_left
         pnl_pct = last / p.entry - 1.0 if p.entry else 0.0
         out.append(
             {
@@ -45,8 +65,20 @@ def _mtm_positions(broker, provider: MarketDataProvider) -> list[dict[str, Any]]
                 "t2": round(p.t2, 2),
                 "t3": round(p.t3, 2),
                 "rr": round((p.t1 - p.entry) / max(p.entry - p.stop, 1e-9), 2),
-                "unrealized_pnl": round(pnl, 2),
+                "unrealized_pnl": round(gross_mark, 2),
+                "unrealized_gross": round(gross_mark, 2),
+                "unrealized_gross_slipped": round(gross_slipped, 2),
+                "exit_slippage_est": round(est_sell.slippage_rupees, 2),
+                "exit_fees_est": round(exit_fees_est, 2),
+                "remaining_entry_fees": round(entry_fee_left, 2),
+                "unrealized_fees_est": round(exit_fees_est + entry_fee_left, 2),
+                "unrealized_slippage_est": round(est_sell.slippage_rupees, 2),
+                "unrealized_net_est": round(est_net, 2),
+                "liquidation_value_est": round(
+                    est_sell.exec_price * qty_open - exit_fees_est, 2
+                ),
                 "unrealized_pct": round(pnl_pct, 4),
+                "entry_fees": round(entry_fee_left, 2),
                 "strategy": p.strategy,
                 "opened_at": p.opened_at,
                 "bars_held": p.bars_held,
@@ -202,17 +234,39 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
         "account": {
             "cash": round(acct["cash"], 2),
             "equity_book": round(acct["equity"], 2),
+            # Gross mark-to-market: cash + last*qty (no exit fees/slippage)
             "equity_mtm": round(mtm_equity, 2),
+            "equity_mtm_gross": round(mtm_equity, 2),
+            # Estimated liquidation: cash + slipped exit proceeds − exit fees
+            "equity_liquidation_est": round(
+                float(acct["cash"])
+                + sum(float(p.get("liquidation_value_est") or 0) for p in positions),
+                2,
+            ),
+            "unrealized_net_est_total": round(
+                sum(float(p.get("unrealized_net_est") or 0) for p in positions), 2
+            ),
             "day_pnl": round(acct["day_pnl"], 2),
             "open_positions": len(positions),
             "starting_capital": 100_000.0,
             "mtm_return": round(mtm_equity / 100_000.0 - 1.0, 4),
+            "charges_broker": acct.get("charges_broker"),
+            "charges_schedule": acct.get("charges_schedule"),
+            "pnl_basis": {
+                "equity_mtm": "gross mark (cash + last×qty)",
+                "equity_liquidation_est": "cash + estimated net exit proceeds",
+            },
         },
         "positions": positions,
+        "charges": (
+            broker.charges.schedule_info() if hasattr(broker, "charges") else default_charge_engine().schedule_info()
+        ),
         "broker": {
             "mode": "manual_journal",
+            "execution": "paper",
+            "live_orders": False,
             "kite_web": "https://kite.zerodha.com",
-            "message": "Log into Kite in your browser, then mark entries/exits here for P&L (no API).",
+            "message": "Paper + manual journal. ChargeEngine applies FYERS fee schedule. No live orders.",
         },
         "opportunities": opportunities,
         "actionable": actionable,

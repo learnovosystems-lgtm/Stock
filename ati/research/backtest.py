@@ -1,4 +1,11 @@
-"""Event-driven swing backtest with Indian cost model."""
+"""Event-driven swing backtest with ChargeEngine net cost model.
+
+Cost-model labels
+-----------------
+EVENT_BASELINE_COST_MODEL = fill-level ChargeEngine (delivery) — event baselines.
+PORTFOLIO_BT_COST_MODEL = fill-level ChargeEngine via PortfolioChargeBook —
+  dual-momentum and adaptive portfolio paths.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +17,11 @@ import pandas as pd
 from ati.config import RiskConfig, DEFAULT
 from ati.engine.risk import RiskEngine
 from ati.indicators.technical import enrich
+from ati.models.charges import Segment, Side
+from ati.research.portfolio_charges import PORTFOLIO_BT_COST_MODEL, PortfolioChargeBook
+
+EVENT_BASELINE_COST_MODEL = "charge_engine_fill_level"
+W4_OUTSTANDING_PORTFOLIO_BT = False  # dual-mom + adaptive use fill-level ChargeEngine
 
 
 @dataclass
@@ -48,6 +60,74 @@ def _stability(trade_returns: np.ndarray) -> float:
     return float(np.clip(base * (1.1 if same_sign else 0.7), 0, 1))
 
 
+def _bt_buy(
+    engine: RiskEngine,
+    cash: float,
+    raw_price: float,
+    qty: int,
+    *,
+    symbol: str,
+    trade_date,
+    session,
+) -> tuple[float, dict | None]:
+    eco = engine.charges.economics_for_fill(
+        side=Side.BUY,
+        qty=qty,
+        raw_price=raw_price,
+        segment=Segment.EQUITY_DELIVERY,
+        session=session,
+        order_id=f"bt-buy-{symbol}-{trade_date}",
+        symbol=symbol,
+        trade_date=trade_date,
+    )
+    if -eco.cash_delta > cash:
+        return cash, None
+    return cash + eco.cash_delta, {
+        "entry": eco.exec_price,
+        "qty": qty,
+        "entry_fees": eco.total_fees,
+        "bars": 0,
+    }
+
+
+def _bt_sell(
+    engine: RiskEngine,
+    cash: float,
+    pos: dict,
+    raw_exit: float,
+    reason: str,
+    symbol: str,
+    *,
+    trade_date,
+    session,
+) -> tuple[float, dict]:
+    eco = engine.charges.economics_for_fill(
+        side=Side.SELL,
+        qty=pos["qty"],
+        raw_price=raw_exit,
+        segment=Segment.EQUITY_DELIVERY,
+        session=session,
+        order_id=f"bt-sell-{symbol}-{reason}-{trade_date}",
+        symbol=symbol,
+        trade_date=trade_date,
+    )
+    gross = (eco.exec_price - pos["entry"]) * pos["qty"]
+    fees = eco.total_fees + float(pos.get("entry_fees") or 0.0)
+    net = gross - fees
+    trade = {
+        "symbol": symbol,
+        "entry": pos["entry"],
+        "exit": eco.exec_price,
+        "pnl": net,
+        "gross_pnl": gross,
+        "fees": fees,
+        "ret": net / (pos["entry"] * pos["qty"]),
+        "bars": pos["bars"],
+        "reason": reason,
+    }
+    return cash + eco.cash_delta, trade
+
+
 def run_breakout_momentum_baseline(
     frames: dict[str, pd.DataFrame],
     *,
@@ -60,6 +140,7 @@ def run_breakout_momentum_baseline(
     """
     risk = risk or DEFAULT.risk
     engine = RiskEngine(risk)
+    session = engine.charges.new_session()
     cash = initial_capital
     equity = initial_capital
     open_pos: dict[str, dict] = {}
@@ -81,52 +162,22 @@ def run_breakout_momentum_baseline(
             pos["bars"] += 1
             # stop / target
             if bar["Low"] <= pos["stop"]:
-                px = engine.apply_sell_slippage(pos["stop"])
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "stop",
-                    }
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(pos["stop"]), "stop", sym, trade_date=dt, session=session
                 )
+                trades.append(trade)
                 to_close.append(sym)
             elif bar["High"] >= pos["target"]:
-                px = engine.apply_sell_slippage(pos["target"])
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "target",
-                    }
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(pos["target"]), "target", sym, trade_date=dt, session=session
                 )
+                trades.append(trade)
                 to_close.append(sym)
             elif pos["bars"] >= 20:
-                px = engine.apply_sell_slippage(float(bar["Close"]))
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "time",
-                    }
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(bar["Close"]), "time", sym, trade_date=dt, session=session
                 )
+                trades.append(trade)
                 to_close.append(sym)
         for sym in to_close:
             open_pos.pop(sym, None)
@@ -157,21 +208,28 @@ def run_breakout_momentum_baseline(
                     and row["rsi_14"] < 72
                 ):
                     continue
-                entry = engine.apply_buy_slippage(float(row["Close"]))
-                stop = float(row["Close"] - 2.2 * row["atr_14"])
+                raw = float(row["Close"])
+                entry_est = engine.apply_buy_slippage(raw)
+                stop = float(raw - 2.2 * row["atr_14"])
                 # Prefer structural stop under recent swing if tighter risk still >= 0.5%
                 swing = float(df["Low"].iloc[max(0, i - 10) : i + 1].min())
-                if swing < entry and (entry - swing) / entry <= 0.08:
+                if swing < entry_est and (entry_est - swing) / entry_est <= 0.08:
                     stop = max(stop, swing)
-                if stop >= entry:
+                if stop >= entry_est:
                     continue
                 risk_amt = equity * risk.risk_per_trade_pct
-                qty = int(risk_amt // (entry - stop))
-                if qty < 1 or qty * entry > cash:
+                qty = int(risk_amt // (entry_est - stop))
+                if qty < 1:
                     continue
-                target = entry + 2.5 * (entry - stop)
-                cash -= entry * qty
-                open_pos[sym] = {"entry": entry, "stop": stop, "target": target, "qty": qty, "bars": 0}
+                target = entry_est + 2.5 * (entry_est - stop)
+                cash, pos = _bt_buy(
+                    engine, cash, raw, qty, symbol=sym, trade_date=dt, session=session
+                )
+                if pos is None:
+                    continue
+                pos["stop"] = stop
+                pos["target"] = target
+                open_pos[sym] = pos
                 if len(open_pos) >= risk.max_positions:
                     break
 
@@ -190,20 +248,11 @@ def run_breakout_momentum_baseline(
         last_dt = curve[-1][0]
         for sym, pos in list(open_pos.items()):
             df = enriched.get(sym)
-            px = float(df.loc[last_dt, "Close"]) if df is not None and last_dt in df.index else pos["entry"]
-            px = engine.apply_sell_slippage(px)
-            pnl = (px - pos["entry"]) * pos["qty"]
-            trades.append(
-                {
-                    "symbol": sym,
-                    "entry": pos["entry"],
-                    "exit": px,
-                    "pnl": pnl,
-                    "ret": pnl / (pos["entry"] * pos["qty"]),
-                    "bars": pos["bars"],
-                    "reason": "eod_flatten",
-                }
+            raw = float(df.loc[last_dt, "Close"]) if df is not None and last_dt in df.index else pos["entry"]
+            cash, trade = _bt_sell(
+                engine, cash, pos, raw, "eod_flatten", sym, trade_date=last_dt, session=session
             )
+            trades.append(trade)
 
     trade_log = pd.DataFrame(trades)
     eq = pd.Series({d: v for d, v in curve}).sort_index()
@@ -262,6 +311,7 @@ def run_pullback_trend_baseline(
     """Alternative baseline: buy pullbacks to rising SMA20 in SMA50>SMA200 trends."""
     risk = risk or DEFAULT.risk
     engine = RiskEngine(risk)
+    session = engine.charges.new_session()
     cash = initial_capital
     equity = initial_capital
     open_pos: dict[str, dict] = {}
@@ -279,52 +329,22 @@ def run_pullback_trend_baseline(
             bar = df.loc[dt]
             pos["bars"] += 1
             if bar["Low"] <= pos["stop"]:
-                px = engine.apply_sell_slippage(pos["stop"])
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "stop",
-                    }
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(pos["stop"]), "stop", sym, trade_date=dt, session=session
                 )
+                trades.append(trade)
                 to_close.append(sym)
             elif bar["High"] >= pos["target"]:
-                px = engine.apply_sell_slippage(pos["target"])
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "target",
-                    }
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(pos["target"]), "target", sym, trade_date=dt, session=session
                 )
+                trades.append(trade)
                 to_close.append(sym)
             elif pos["bars"] >= 25:
-                px = engine.apply_sell_slippage(float(bar["Close"]))
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "time",
-                    }
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(bar["Close"]), "time", sym, trade_date=dt, session=session
                 )
+                trades.append(trade)
                 to_close.append(sym)
         for sym in to_close:
             open_pos.pop(sym, None)
@@ -346,16 +366,23 @@ def run_pullback_trend_baseline(
                     and 35 <= row["rsi_14"] <= 55
                 ):
                     continue
-                entry = engine.apply_buy_slippage(float(row["Close"]))
-                stop = float(min(df["Low"].iloc[i - 10 : i + 1].min(), entry - 2.0 * row["atr_14"]))
-                if stop >= entry:
+                raw = float(row["Close"])
+                entry_est = engine.apply_buy_slippage(raw)
+                stop = float(min(df["Low"].iloc[i - 10 : i + 1].min(), entry_est - 2.0 * row["atr_14"]))
+                if stop >= entry_est:
                     continue
-                qty = int((equity * risk.risk_per_trade_pct) // (entry - stop))
-                if qty < 1 or qty * entry > cash:
+                qty = int((equity * risk.risk_per_trade_pct) // (entry_est - stop))
+                if qty < 1:
                     continue
-                target = entry + 2.5 * (entry - stop)
-                cash -= entry * qty
-                open_pos[sym] = {"entry": entry, "stop": stop, "target": target, "qty": qty, "bars": 0}
+                target = entry_est + 2.5 * (entry_est - stop)
+                cash, pos = _bt_buy(
+                    engine, cash, raw, qty, symbol=sym, trade_date=dt, session=session
+                )
+                if pos is None:
+                    continue
+                pos["stop"] = stop
+                pos["target"] = target
+                open_pos[sym] = pos
                 if len(open_pos) >= risk.max_positions:
                     break
 
@@ -446,7 +473,8 @@ def run_dual_momentum_baseline(
     )
 
     risk = risk or DEFAULT.risk
-    cost_rt = RiskEngine(risk).round_trip_cost_pct()
+    book = PortfolioChargeBook.create(initial_capital=initial_capital, risk=risk)
+    assert book.cost_model == PORTFOLIO_BT_COST_MODEL == "charge_engine_fill_level"
 
     closes = {
         sym: df["Close"].astype(float)
@@ -484,47 +512,18 @@ def run_dual_momentum_baseline(
         vix_aligned = india_vix.reindex(panel.index).ffill()
 
     dates = list(panel.index)
-    cash = initial_capital
-    holdings: dict[str, float] = {}
-    entry_px: dict[str, float] = {}
-    entry_i: dict[str, int] = {}
-    trades: list[dict] = []
     curve: list[tuple] = []
     last_reb = -10_000
     peak_equity = initial_capital
     dd_halt = False
 
-    def portfolio_value(i: int) -> float:
-        value = cash
-        for sym, sh in holdings.items():
-            value += sh * float(panel.iloc[i][sym])
-        return value
-
     def close_position(sym: str, i: int, reason: str) -> None:
-        nonlocal cash
-        sh = holdings.pop(sym)
-        px = float(panel.iloc[i][sym])
-        sell = px * (1 - cost_rt / 2)
-        cash += sh * sell
-        e_px = entry_px.pop(sym)
-        e_i = entry_i.pop(sym)
-        buy = e_px * (1 + cost_rt / 2)
-        trades.append(
-            {
-                "symbol": sym,
-                "entry": buy,
-                "exit": sell,
-                "pnl": sh * (sell - buy),
-                "ret": sell / buy - 1.0,
-                "bars": max(1, i - e_i),
-                "reason": reason,
-            }
-        )
+        book.close_position(sym, panel, i, reason, dates[i])
 
     trade_start_ts = pd.Timestamp(trade_start) if trade_start is not None else None
 
     for i, dt in enumerate(dates):
-        equity = portfolio_value(i)
+        equity = book.portfolio_value(panel, i)
         curve.append((dt, equity))
         dd, peak_equity = drawdown_from_peak([equity], peak_equity)
 
@@ -532,15 +531,14 @@ def run_dual_momentum_baseline(
         # permanently lock the book (equity cannot recover vs an old peak while flat).
         in_trade_window = trade_start_ts is None or pd.Timestamp(dt) >= trade_start_ts
         if max_portfolio_dd is not None and in_trade_window and dd <= max_portfolio_dd and not dd_halt:
-            if holdings:
-                for sym in list(holdings):
+            if book.holdings:
+                for sym in list(book.holdings):
                     close_position(sym, i, "dd_killswitch")
-                curve[-1] = (dt, portfolio_value(i))
+                curve[-1] = (dt, book.portfolio_value(panel, i))
                 last_reb = i
             dd_halt = True
-            peak_equity = portfolio_value(i)  # new high-water mark after defensive flatten
+            peak_equity = book.portfolio_value(panel, i)
             continue
-        # Cool-off: stay flat for one rebalance cycle after a kill
         if dd_halt and i - last_reb >= rebalance_every:
             dd_halt = False
 
@@ -551,7 +549,6 @@ def run_dual_momentum_baseline(
         if i - last_reb < rebalance_every:
             continue
 
-        # Hard cash gates: NIFTY / VIX / breadth / DD halt
         risk_on = True
         cash_reason = "nifty_gate_cash"
         if nifty_sma_gate and nifty_aligned is not None:
@@ -570,10 +567,10 @@ def run_dual_momentum_baseline(
             cash_reason = "dd_halt_cash"
 
         if not risk_on:
-            for sym in list(holdings):
+            for sym in list(book.holdings):
                 close_position(sym, i, cash_reason)
             last_reb = i
-            curve[-1] = (dt, portfolio_value(i))
+            curve[-1] = (dt, book.portfolio_value(panel, i))
             continue
 
         scores: dict[str, float] = {}
@@ -599,11 +596,11 @@ def run_dual_momentum_baseline(
         target = [s for s, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
         target_set = set(target)
 
-        for sym in list(holdings):
+        for sym in list(book.holdings):
             if sym not in target_set:
                 close_position(sym, i, "rebalance" if target else "cash")
 
-        equity = portfolio_value(i)
+        equity = book.portfolio_value(panel, i)
         if not target:
             last_reb = i
             curve[-1] = (dt, equity)
@@ -611,48 +608,51 @@ def run_dual_momentum_baseline(
 
         n = len(target)
         target_value = equity / n
-        for sym in list(holdings):
+        for sym in list(book.holdings):
             if sym not in target_set:
                 continue
             px = float(panel.iloc[i][sym])
-            cur = holdings[sym] * px
+            lot = book.holdings[sym]
+            cur = lot.shares * px
             if cur > target_value * 1.05:
                 sell_sh = (cur - target_value) / px
-                sell = px * (1 - cost_rt / 2)
-                cash += sell_sh * sell
-                holdings[sym] -= sell_sh
+                book.sell(
+                    sym,
+                    sell_sh,
+                    px,
+                    trade_date=dt,
+                    bar_i=i,
+                    order_id=f"bt-trim-{sym}-{dt}",
+                    reason="rebalance_trim",
+                )
 
-        equity = portfolio_value(i)
+        equity = book.portfolio_value(panel, i)
         target_value = equity / n
         for sym in target:
             px = float(panel.iloc[i][sym])
-            buy = px * (1 + cost_rt / 2)
-            desired_sh = target_value / buy
-            have = holdings.get(sym, 0.0)
+            have = book.holdings[sym].shares if sym in book.holdings else 0.0
+            # Estimate desired shares using raw px; buy() applies ChargeEngine fees
+            desired_sh = target_value / max(px, 1e-9)
             if desired_sh > have + 1e-9:
                 need = desired_sh - have
-                cost = need * buy
-                if cost > cash:
-                    need = cash / buy
-                    cost = need * buy
-                if need <= 0:
-                    continue
-                cash -= cost
-                holdings[sym] = have + need
-                if sym not in entry_px:
-                    entry_px[sym] = px
-                    entry_i[sym] = i
+                book.buy(
+                    sym,
+                    need,
+                    px,
+                    trade_date=dt,
+                    bar_i=i,
+                    order_id=f"bt-buy-{sym}-{dt}",
+                )
 
         last_reb = i
-        curve[-1] = (dt, portfolio_value(i))
+        curve[-1] = (dt, book.portfolio_value(panel, i))
 
-    if holdings:
+    if book.holdings:
         i = len(dates) - 1
-        for sym in list(holdings):
-            close_position(sym, i, "eod_flatten")
-        curve[-1] = (dates[-1], cash)
+        book.flatten(panel, i, "eod_flatten", dates[i])
+        curve[-1] = (dates[-1], book.cash)
 
-    trade_log = pd.DataFrame(trades)
+    trade_log = pd.DataFrame(book.trades)
     eq = pd.Series({d: v for d, v in curve}).sort_index()
     if trade_log.empty or eq.empty:
         return empty
