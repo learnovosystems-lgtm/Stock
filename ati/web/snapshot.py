@@ -7,9 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ati.brokers.zerodha import fetch_live_snapshot
 from ati.config import REPORTS_DIR, ensure_dirs
 from ati.data.provider import MarketDataProvider
 from ati.data.universe import load_universe
+from ati.engine.suggestion_quality import annotate_opportunity, enrich_opportunity_dict
+from ati.models.opportunity import Opportunity
 from ati.ops.session import _default_broker, is_market_open
 from ati.regime.detector import RegimeDetector
 from ati.research.registry import StrategyRegistry
@@ -29,11 +32,14 @@ def _mtm_positions(broker, provider: MarketDataProvider) -> list[dict[str, Any]]
                 "symbol": p.symbol.replace(".NS", ""),
                 "qty": p.qty,
                 "entry": round(p.entry, 2),
+                "buy": round(p.entry, 2),
+                "sell": round(p.t1, 2),
                 "last": round(last, 2),
                 "stop": round(p.stop, 2),
                 "t1": round(p.t1, 2),
                 "t2": round(p.t2, 2),
                 "t3": round(p.t3, 2),
+                "rr": round((p.t1 - p.entry) / max(p.entry - p.stop, 1e-9), 2),
                 "unrealized_pnl": round(pnl, 2),
                 "unrealized_pct": round(pnl_pct, 4),
                 "strategy": p.strategy,
@@ -44,14 +50,29 @@ def _mtm_positions(broker, provider: MarketDataProvider) -> list[dict[str, Any]]
     return out
 
 
+def _cards_from_opps(opps: list[Opportunity], metrics) -> list[dict[str, Any]]:
+    cards = []
+    for o in opps:
+        ann = annotate_opportunity(o, metrics)
+        cards.append(enrich_opportunity_dict(o, ann))
+    cards.sort(
+        key=lambda c: (
+            0 if c["signal"] == "BUY" else 1,
+            0 if c["quality_grade"] == "A" else 1 if c["quality_grade"] == "B" else 2,
+            -c["quality_score"],
+        )
+    )
+    return cards
+
+
 def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, Any]:
     ensure_dirs()
     provider = MarketDataProvider()
     broker = _default_broker()
     uni = load_universe()
     registry = StrategyRegistry()
+    metrics = registry.latest_metrics()
 
-    # Regime
     sample = {i.symbol: provider.get_daily(i.symbol) for i in uni[:50]}
     sample = {k: v for k, v in sample.items() if v is not None and len(v) > 60}
     regime = RegimeDetector(provider).detect(sample)
@@ -64,8 +85,7 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
     scan_meta: dict[str, Any] = {}
     if run_scan:
         acct = broker.account()
-        scanner = MarketScanner(metrics=registry.latest_metrics())
-        # Limit universe for dashboard refresh latency
+        scanner = MarketScanner(metrics=metrics)
         result = scanner.scan(
             universe=uni[:limit_scan] if limit_scan else uni,
             equity=acct["equity"],
@@ -77,23 +97,20 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
             "scanned": result.scanned,
             "generated_at": result.generated_at,
         }
-        for o in result.opportunities[:15]:
-            opportunities.append(
-                {
-                    "stock": o.stock.replace(".NS", ""),
-                    "signal": o.signal.value,
-                    "score": round(o.opportunity_score, 1),
-                    "strategy": o.strategy_selected,
-                    "entry": round(o.ideal_entry, 2),
-                    "stop": round(o.stop_loss, 2),
-                    "t1": round(o.target_1, 2),
-                    "rr": round(o.risk_reward, 2),
-                    "sector": o.sector,
-                }
-            )
+        opportunities = _cards_from_opps(result.opportunities[:25], metrics)
     else:
+        feed = REPORTS_DIR / "opportunities_latest.json"
         latest = REPORTS_DIR / "scan_latest.json"
-        if latest.exists():
+        if feed.exists():
+            raw = json.loads(feed.read_text())
+            scan_meta = {
+                "regime": raw.get("regime"),
+                "regime_notes": raw.get("regime_notes"),
+                "scanned": raw.get("scanned"),
+                "generated_at": raw.get("generated_at"),
+            }
+            opportunities = raw.get("opportunities") or raw.get("actionable") or []
+        elif latest.exists():
             raw = json.loads(latest.read_text())
             scan_meta = {
                 "regime": raw.get("regime"),
@@ -101,16 +118,22 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
                 "scanned": raw.get("scanned"),
                 "generated_at": raw.get("generated_at"),
             }
-            for o in raw.get("opportunities", [])[:15]:
+            # Best-effort remap from persisted Opportunity dumps
+            for o in raw.get("opportunities", [])[:25]:
                 opportunities.append(
                     {
                         "stock": str(o.get("stock", "")).replace(".NS", ""),
                         "signal": o.get("signal"),
                         "score": round(float(o.get("opportunity_score", 0) or 0), 1),
+                        "quality_grade": "C",
+                        "quality_score": round(float(o.get("opportunity_score", 0) or 0), 1),
                         "strategy": o.get("strategy_selected"),
-                        "entry": o.get("ideal_entry"),
+                        "current": o.get("current_price"),
+                        "buy": o.get("ideal_entry"),
+                        "sell": o.get("target_1"),
+                        "sell_t2": o.get("target_2"),
+                        "sell_t3": o.get("target_3"),
                         "stop": o.get("stop_loss"),
-                        "t1": o.get("target_1"),
                         "rr": o.get("risk_reward"),
                         "sector": o.get("sector"),
                     }
@@ -124,11 +147,12 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
     if not positions:
         mtm_equity = float(acct["equity"])
 
+    zerodha = fetch_live_snapshot().to_dict()
+
     production = registry.list_production()
     experiments = []
     try:
-        # latest metrics for promoted / key strategies
-        for m in registry.latest_metrics()[-12:]:
+        for m in metrics[-12:]:
             experiments.append(
                 {
                     "strategy_id": m.strategy_id,
@@ -144,11 +168,13 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
     except Exception:  # noqa: BLE001
         pass
 
+    actionable = [c for c in opportunities if c.get("signal") == "BUY" and c.get("quality_grade") in ("A", "B")]
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
         "brand": "ATI Desk",
-        "tagline": "Adaptive Indian equities — paper ₹1L",
+        "tagline": "Adaptive Indian equities — Zerodha live + paper",
         "regime": {
             "regime": regime.regime.value,
             "confidence": round(regime.confidence, 3),
@@ -170,7 +196,9 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
             "mtm_return": round(mtm_equity / 100_000.0 - 1.0, 4),
         },
         "positions": positions,
+        "zerodha": zerodha,
         "opportunities": opportunities,
+        "actionable": actionable,
         "scan": scan_meta,
         "production": production,
         "metrics": experiments,
@@ -180,8 +208,18 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
             "adaptive_oos_sharpe": 0.68,
             "adaptive_oos_stability": 0.48,
             "promoted": ["dual_momentum_nifty_gated", "regime_adaptive_multi"],
-            "note": "Walk-forward OOS promoted sleeves; paper entries gated to measured families.",
+            "note": (
+                "Suggestions graded A/B/C using OOS family evidence + RR≥2. "
+                "Zerodha live P&L when KITE_* secrets are bound."
+            ),
         },
+        "efficiency_roadmap": [
+            "Bind Zerodha KITE_API_KEY + KITE_ACCESS_TOKEN for live broker P&L",
+            "Run `ati.cli watch` for continuous opportunity refresh",
+            "Prefer grade A/B BUY only — demote families with negative OOS",
+            "Expand universe via universe_extra.csv after liquidity filters",
+            "Add intraday confirmation cadence during NSE hours",
+        ],
     }
 
 

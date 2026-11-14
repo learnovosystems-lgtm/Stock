@@ -20,6 +20,7 @@
       <span class="pill" id="marketPill">—</span>
       <span class="pill muted" id="clock">—</span>
       <button type="button" class="btn ghost" id="btnRefresh">Refresh live</button>
+      <button type="button" class="btn ghost" id="btnAnalyze">Analyze now</button>
       <button type="button" class="btn primary" id="btnSession">Run session</button>
     </div>
   </header>
@@ -64,14 +65,33 @@
     <section class="grid-2">
       <div class="block">
         <div class="block-head">
-          <h2>Live positions</h2>
-          <p>Marked to last close · hard risk rules on</p>
+          <h2>Zerodha live</h2>
+          <p id="zStatus">Broker P&amp;L from your Kite account</p>
+        </div>
+        <div class="z-summary" id="zSummary"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th><th>Qty</th><th>Avg buy</th><th>LTP</th><th>P&amp;L</th><th>Day</th>
+              </tr>
+            </thead>
+            <tbody id="zBody"></tbody>
+          </table>
+          <p class="empty" id="zEmpty" hidden>No Zerodha positions (or secrets not bound).</p>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="block-head">
+          <h2>Paper book</h2>
+          <p>ATI paper · MTM last close · risk gates</p>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Symbol</th><th>Qty</th><th>Entry</th><th>Last</th><th>P&amp;L</th><th>Stop</th><th>Strategy</th>
+                <th>Symbol</th><th>Qty</th><th>Buy</th><th>Sell T1</th><th>Last</th><th>P&amp;L</th><th>SL</th><th>RR</th>
               </tr>
             </thead>
             <tbody id="posBody"></tbody>
@@ -79,23 +99,24 @@
           <p class="empty" id="posEmpty" hidden>No open paper positions.</p>
         </div>
       </div>
+    </section>
 
-      <div class="block">
-        <div class="block-head">
-          <h2>Ranked opportunities</h2>
-          <p id="scanMeta">Live scanner</p>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Stock</th><th>Signal</th><th>Score</th><th>Strategy</th><th>R:R</th>
-              </tr>
-            </thead>
-            <tbody id="oppBody"></tbody>
-          </table>
-        </div>
+    <section class="block">
+      <div class="block-head">
+        <h2>Continuous opportunities</h2>
+        <p id="scanMeta">Buy · Sell · Stop · RR for every idea · quality graded vs OOS evidence</p>
       </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Grade</th><th>Stock</th><th>Signal</th><th>Buy</th><th>Sell</th><th>Stop</th><th>RR</th><th>Score</th><th>Strategy</th>
+            </tr>
+          </thead>
+          <tbody id="oppBody"></tbody>
+        </table>
+      </div>
+      <div class="cards" id="oppCards"></div>
     </section>
 
     <section class="block">
