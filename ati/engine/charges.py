@@ -3,10 +3,14 @@
 Rules (Phase-1 corrections):
 - Brokerage is assessed at the **executed-order** level (partial fills of the same
   order_id share one brokerage = min(cap, pct × order turnover)).
-- IPFT for NSE equity/futures from FYERS charges-list: ₹0.01/crore (not ₹10/crore).
-  Discrepancy with FYERS statutory KB (₹10/crore) is documented; charges-list wins.
-- Equity options IPFT: ₹50/crore (subject to exchange circular verification).
-- DP ₹12.50+GST once per ISIN per trading day on delivery sells only.
+- IPFT for NSE equity/intraday/futures/options (on premium): ₹0.01/crore from
+  fyers.in/charges-list; options aligned with NSE Circular NSE/FA/73061
+  (27 Feb 2026; eff. 1 Mar 2026). Statutory KB still cites ₹10/crore (equity/FUT)
+  and ₹50/crore (options) — charges-list + NSE circular win; KB not used.
+- GST taxable base per charges-list: brokerage + exchange txn + clearing + SEBI
+  turnover + NSE IPFT (+ DP GST when charged). STT and stamp excluded. Statutory
+  KB describes GST differently — charges-list treatment used for this schedule.
+- DP ₹12.50+GST once per ISIN per trading day on delivery sells only (atomic ledger).
 - Slippage is price-only — never folded into fee lines.
 - Optional event charges (call-and-trade, square-off, pledge, ledger interest)
   exist as hooks; not applied unless explicitly requested.
@@ -15,6 +19,7 @@ Sources:
 - https://fyers.in/charges-list
 - https://fyers.in/pricing
 - https://support.fyers.in/portal/en/kb/articles/what-are-the-statutory-charges-on-trades-at-fyers-stt-gst-sebi-turnover-fee-ipft-etc
+- NSE Circular NSE/FA/73061 (2026-02-27)
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from pathlib import Path
 from typing import Sequence
 from zoneinfo import ZoneInfo
 
-from ati.engine.dp_ledger import dp_already_charged, record_dp_charge
+from ati.engine.dp_ledger import dp_already_charged, try_record_dp_charge
 
 from ati.models.charges import (
     BrokerId,
@@ -104,15 +109,20 @@ class FeeSchedule:
 def _fyers_standard_2026_04_01() -> FeeSchedule:
     """FYERS Standard plan — effective 2026-04-01 (STT F&O revision date).
 
-    IPFT: charges-list shows ₹0.01/Crore for equity delivery/intraday/futures.
-    FYERS statutory KB (01 Apr 2026) still shows ₹10/Crore with a worked example.
-    Per Phase-1 correction: pin charges-list ₹0.01/Crore and document the conflict.
-    Options IPFT: ₹50/Crore per charges-list (on premium).
+    IPFT (all NSE equity segments including options on premium): ₹0.01/Crore
+    from fyers.in/charges-list, aligned with NSE Circular NSE/FA/73061
+    (27 Feb 2026) revising equity options IPFT to ₹0.01/crore effective
+    1 Mar 2026. This schedule begins 2026-04-01, so options use ₹0.01/crore.
+
+    Discrepancies with FYERS statutory help article (still cites equity/FUT
+    ₹10/crore and options ₹50/crore in places): charges-list + NSE circular
+    win; KB values are NOT used.
     """
     gst = 0.18
     sebi = 10.0
-    ipft_eq = 0.01  # ₹ per crore — FYERS charges-list
-    ipft_opt = 50.0
+    # ₹ per crore — fyers.in/charges-list + NSE/FA/73061 (options eff. 2026-03-01)
+    ipft_eq = 0.01
+    ipft_opt = 0.01
     eq_exch = 0.0030699 / 100.0
     fut_exch = 0.0018299 / 100.0
     opt_exch = 0.0355299 / 100.0  # on premium
@@ -201,6 +211,7 @@ def _fyers_standard_2026_04_01() -> FeeSchedule:
             "https://fyers.in/charges-list",
             "https://fyers.in/pricing",
             "https://support.fyers.in/portal/en/kb/articles/what-are-the-statutory-charges-on-trades-at-fyers-stt-gst-sebi-turnover-fee-ipft-etc",
+            "NSE Circular NSE/FA/73061 (2026-02-27; equity options IPFT ₹0.01/crore eff. 2026-03-01)",
         ),
         equity_delivery=delivery,
         equity_intraday=intraday,
@@ -209,9 +220,13 @@ def _fyers_standard_2026_04_01() -> FeeSchedule:
         mutual_fund=mf,
         notes=(
             "FYERS Standard. Account opening/AMC ₹0. Prime not modeled. "
-            "IPFT equity/FUT = ₹0.01/crore from fyers.in/charges-list; "
-            "statutory KB still cites ₹10/crore — discrepancy documented, charges-list used. "
-            "Options IPFT ₹50/crore from charges-list (verify vs NSE circular). "
+            "IPFT NSE (delivery/intraday/futures/options on premium) = ₹0.01/crore "
+            "from fyers.in/charges-list; options aligned with NSE/FA/73061 "
+            "(eff. 2026-03-01). Statutory KB still cites ₹10/crore (equity/FUT) "
+            "and ₹50/crore (options) — discrepancy documented; charges-list used. "
+            "GST base per charges-list: brokerage + exchange txn + clearing + SEBI + "
+            "NSE IPFT (+ DP GST when charged); STT and stamp excluded. Statutory KB "
+            "describes GST differently — charges-list treatment used. "
             "F&O STT rates effective 2026-04-01."
         ),
     )
@@ -582,8 +597,9 @@ class ChargeEngine:
         gst_base = brokerage + exchange_txn + clearing + sebi + ipft
         gst = gst_base * rates.gst_rate
 
-        # --- DP once per instrument/day (delivery sell only); persisted across restarts ---
+        # --- DP once per instrument/day (delivery sell only); atomic ledger claim ---
         dp = 0.0
+        charge_dp = False
         if seg == Segment.EQUITY_DELIVERY and s == Side.SELL and rates.dp_flat > 0:
             if apply_dp is False:
                 charge_dp = False
@@ -593,29 +609,20 @@ class ChargeEngine:
                         "Delivery sell requires ISIN or canonical symbol for DP "
                         "deduplication; refusing to bypass DP aggregation"
                     )
-                already = False
+                # Session fast-path: already claimed in this process
                 if session is not None and (instrument_id, td) in session._dp_charged:
-                    already = True
-                if not already and dp_already_charged(
-                    broker=self.broker,
-                    instrument_id=instrument_id,
-                    trade_date=td,
-                    path=self.dp_ledger_path,
-                ):
-                    already = True
-                if apply_dp is True:
-                    charge_dp = not already
+                    charge_dp = False
                 else:
-                    charge_dp = not already
-                if charge_dp:
-                    if session is not None:
-                        session._dp_charged.add((instrument_id, td))
-                    record_dp_charge(
+                    # Atomic insert-or-ignore — only the winner debits DP
+                    won = try_record_dp_charge(
                         broker=self.broker,
                         instrument_id=instrument_id,
                         trade_date=td,
                         path=self.dp_ledger_path,
                     )
+                    charge_dp = won
+                    if won and session is not None:
+                        session._dp_charged.add((instrument_id, td))
             if charge_dp:
                 dp = rates.dp_flat
                 if rates.dp_gst:
@@ -984,9 +991,21 @@ class ChargeEngine:
             "amc": s.amc,
             "gst_base_components": list(s.gst_base_components),
             "gst_excludes": ["stt", "stamp"],
+            "gst_source": (
+                "fyers.in/charges-list — brokerage + exchange txn + clearing + SEBI + "
+                "NSE IPFT (+ DP GST). Statutory KB describes GST differently; "
+                "charges-list treatment used for this schedule."
+            ),
             "ipft_policy": (
-                "NSE equity/futures ₹0.01 per crore from fyers.in/charges-list; "
-                "KB cites ₹10/crore — charges-list used; BSE IPFT=0"
+                "NSE delivery/intraday/futures/options(on premium) ₹0.01/crore from "
+                "fyers.in/charges-list; options aligned with NSE/FA/73061 (eff. 2026-03-01). "
+                "Statutory KB still cites ₹10/crore (equity/FUT) and ₹50/crore (options) — "
+                "not used. BSE IPFT=0."
+            ),
+            "w4_outstanding": (
+                "Portfolio dual-momentum/adaptive backtests still use approximate "
+                "blended RT %% (PORTFOLIO_BT_COST_MODEL); not fill-level ChargeEngine. "
+                "W4 is not fully complete while those paths remain approximate."
             ),
         }
 

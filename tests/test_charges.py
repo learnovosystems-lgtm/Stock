@@ -62,8 +62,12 @@ def test_fyers_not_zerodha_and_ipft_from_charges_list():
     assert fy.broker == "fyers" and zd.broker == "zerodha"
     assert fy.equity_delivery.ipft_per_crore == pytest.approx(0.01)
     assert fy.futures.ipft_per_crore == pytest.approx(0.01)
-    assert fy.equity_options.ipft_per_crore == pytest.approx(50.0)
-    assert "0.01" in fy.notes and "10/crore" in fy.notes
+    # Options IPFT ₹0.01/crore (charges-list + NSE/FA/73061); NOT ₹50/crore KB remnant
+    assert fy.equity_options.ipft_per_crore == pytest.approx(0.01)
+    assert fy.equity_options.ipft_per_crore != pytest.approx(50.0)
+    assert "0.01" in fy.notes and "50/crore" in fy.notes
+    assert "NSE/FA/73061" in fy.notes or any("73061" in u for u in fy.source_urls)
+    assert fy.effective_date >= date(2026, 4, 1)  # after options IPFT revision 2026-03-01
 
 
 def test_equity_delivery_charges(tmp_path: Path):
@@ -119,7 +123,26 @@ def test_equity_options_charges():
     _approx(buy.brokerage, 20.0)  # flat
     assert buy.stt == 0.0
     _approx(sell.stt, 0.0015 * 50 * 120)
-    _approx(buy.ipft, 5000 * 50.0 / 10_000_000)
+    # Small premium TO → IPFT rounds to 0 at 2dp under ₹0.01/crore
+    assert buy.ipft == 0.0
+    # Visible options IPFT: ₹1 crore premium * ₹0.01/crore = ₹0.01
+    big = eng.charges_for_fill(
+        side=Side.BUY, qty=100_000, price=100.0, segment=Segment.EQUITY_OPTIONS
+    )
+    _approx(big.ipft, 0.01)
+    # Must NOT use legacy ₹50/crore (would be ₹50 on ₹1cr)
+    assert big.ipft != pytest.approx(50.0)
+
+
+def test_options_ipft_effective_date_and_rate():
+    """Options IPFT ₹0.01/crore for schedule effective after NSE/FA/73061 (2026-03-01)."""
+    fy = resolve_schedule("fyers", as_of="2026-04-01")
+    assert fy.effective_date == date(2026, 4, 1)
+    assert fy.equity_options.ipft_per_crore == pytest.approx(0.01)
+    info = ChargeEngine("fyers", as_of="2026-04-01").schedule_info()
+    assert "0.01" in info["ipft_policy"]
+    assert "50/crore" in info["ipft_policy"]  # discrepancy documented, not applied
+    assert "73061" in info["ipft_policy"] or any("73061" in u for u in info["source_urls"])
 
 
 def test_brokerage_cap_boundaries():
@@ -425,3 +448,86 @@ def test_mutual_fund_zero_brokerage():
     eng = ChargeEngine("fyers", slippage_pct=0.0)
     c = eng.charges_for_fill(side=Side.BUY, qty=10, price=100, segment=Segment.MUTUAL_FUND)
     assert c.brokerage == 0 and c.total_fees == 0
+
+
+def test_concurrent_dp_exactly_once(tmp_path: Path):
+    """Simultaneous delivery sells for same ISIN/date → exactly one DP debit."""
+    import concurrent.futures
+
+    from ati.engine.dp_ledger import try_record_dp_charge
+
+    ledger = tmp_path / "dp_conc.db"
+    # Direct ledger race
+    results: list[bool] = []
+
+    def claim() -> bool:
+        return try_record_dp_charge(
+            broker="fyers",
+            instrument_id="INE002A01018",
+            trade_date="2026-11-14",
+            path=ledger,
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+        futs = [ex.submit(claim) for _ in range(32)]
+        results = [f.result() for f in futs]
+    assert sum(1 for r in results if r) == 1
+    assert sum(1 for r in results if not r) == 31
+
+    # ChargeEngine path: concurrent sells → exactly one fill with dp == 12.5
+    eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=tmp_path / "dp_eng.db")
+    dps: list[float] = []
+
+    def sell_once(i: int) -> float:
+        c = eng.charges_for_fill(
+            side=Side.SELL,
+            qty=10,
+            price=100,
+            segment=Segment.EQUITY_DELIVERY,
+            isin="INE002A01018",
+            trade_date="2026-11-14",
+            order_id=f"conc-{i}",
+        )
+        return c.dp
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+        futs = [ex.submit(sell_once, i) for i in range(24)]
+        dps = [f.result() for f in futs]
+    assert sum(1 for d in dps if d == 12.5) == 1
+    assert sum(1 for d in dps if d == 0.0) == 23
+
+
+def test_gst_charges_list_base_documented():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    info = eng.schedule_info()
+    assert info["gst_base_components"] == [
+        "brokerage",
+        "exchange_txn",
+        "clearing",
+        "sebi",
+        "ipft",
+        "dp",
+    ]
+    assert "stt" in info["gst_excludes"] and "stamp" in info["gst_excludes"]
+    assert "charges-list" in info["gst_source"].lower()
+    assert "statutory kb" in info["gst_source"].lower()
+    # Large turnover so IPFT is visible in GST base
+    c = eng.charges_for_fill(
+        side=Side.BUY, qty=10_000, price=1000.0, segment=Segment.EQUITY_DELIVERY, symbol="GST"
+    )
+    expected = (c.brokerage + c.exchange_txn + c.clearing + c.sebi + c.ipft) * 0.18
+    _approx(c.gst, expected, tol=0.02)
+    assert c.stt > 0 and c.stamp > 0
+
+
+def test_portfolio_bt_marked_approximate_w4_outstanding():
+    from ati.research.adaptive import PORTFOLIO_BT_COST_MODEL as ADAPTIVE_FLAG
+    from ati.research.backtest import EVENT_BASELINE_COST_MODEL, PORTFOLIO_BT_COST_MODEL
+
+    assert EVENT_BASELINE_COST_MODEL == "charge_engine_fill_level"
+    assert "approximate" in PORTFOLIO_BT_COST_MODEL
+    assert PORTFOLIO_BT_COST_MODEL == ADAPTIVE_FLAG or "approximate" in ADAPTIVE_FLAG
+    info = ChargeEngine("fyers").schedule_info()
+    assert "w4_outstanding" in info
+    assert "approximate" in info["w4_outstanding"].lower()
+    assert "not fully complete" in info["w4_outstanding"].lower()

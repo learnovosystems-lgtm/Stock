@@ -6,8 +6,8 @@ EVENT_BASELINE_COST_MODEL = fill-level ChargeEngine (delivery) — used by
   run_breakout_momentum_baseline / run_pullback_trend_baseline.
 PORTFOLIO_BT_COST_MODEL = approximate blended round-trip %% via
   ChargeEngine.round_trip_cost_pct applied half on buy/sell prices — used by
-  run_dual_momentum_baseline. Not fill-level; flagged explicitly (not claimed
-  as full ChargeEngine consistency).
+  run_dual_momentum_baseline. Not fill-level ChargeEngine; outstanding W4 item.
+  Do not describe W4 as fully complete while this path remains approximate.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from ati.models.charges import Segment, Side
 
 EVENT_BASELINE_COST_MODEL = "charge_engine_fill_level"
 PORTFOLIO_BT_COST_MODEL = "approximate_charge_engine_rt_pct"
+W4_OUTSTANDING_PORTFOLIO_BT = True  # fill-level ChargeEngine not yet wired here
 
 
 @dataclass
