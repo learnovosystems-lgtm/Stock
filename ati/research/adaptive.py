@@ -1,8 +1,6 @@
 """Regime-adaptive multi-strategy book — auto-switches by market situation.
 
-Cost model: approximate blended round-trip %% via ChargeEngine.round_trip_cost_pct
-(same as PORTFOLIO_BT_COST_MODEL in ati.research.backtest). Not fill-level;
-DP / order brokerage aggregation not applied trade-by-trade.
+Cost model: fill-level ChargeEngine via PortfolioChargeBook (delivery segment).
 """
 
 from __future__ import annotations
@@ -13,7 +11,6 @@ import numpy as np
 import pandas as pd
 
 from ati.config import DEFAULT, RiskConfig
-from ati.engine.risk import RiskEngine
 from ati.models.opportunity import MarketRegime
 from ati.research.backtest import PORTFOLIO_BT_COST_MODEL, BacktestResult
 from ati.research.gates import (
@@ -23,6 +20,7 @@ from ati.research.gates import (
     sector_neutral_scores,
     universe_breadth,
 )
+from ati.research.portfolio_charges import PortfolioChargeBook
 from ati.research.regime_series import book_for_regime, classify_regime_at
 
 
@@ -118,8 +116,8 @@ def run_mean_reversion_baseline(
 ) -> BacktestResult:
     """Standalone mean-reversion book for SIDEWAYS regimes (stretch → mean)."""
     risk = risk or DEFAULT.risk
-    cost_rt = RiskEngine(risk).round_trip_cost_pct()  # PORTFOLIO_BT_COST_MODEL approx
-    _ = PORTFOLIO_BT_COST_MODEL
+    book = PortfolioChargeBook.create(initial_capital=initial_capital, risk=risk)
+    assert book.cost_model == PORTFOLIO_BT_COST_MODEL
     closes = {
         sym: df["Close"].astype(float)
         for sym, df in frames.items()
@@ -130,45 +128,12 @@ def run_mean_reversion_baseline(
 
     panel = pd.DataFrame(closes).sort_index().ffill()
     dates = list(panel.index)
-    cash = initial_capital
-    holdings: dict[str, float] = {}
-    entry_px: dict[str, float] = {}
-    entry_i: dict[str, int] = {}
-    trades: list[dict] = []
     curve: list[tuple] = []
     last_reb = -10_000
     trade_start_ts = pd.Timestamp(trade_start) if trade_start is not None else None
 
-    def portfolio_value(i: int) -> float:
-        value = cash
-        for sym, sh in holdings.items():
-            value += sh * float(panel.iloc[i][sym])
-        return value
-
-    def close_position(sym: str, i: int, reason: str) -> None:
-        nonlocal cash
-        sh = holdings.pop(sym)
-        px = float(panel.iloc[i][sym])
-        sell = px * (1 - cost_rt / 2)
-        cash += sh * sell
-        e_px = entry_px.pop(sym)
-        e_i = entry_i.pop(sym)
-        buy = e_px * (1 + cost_rt / 2)
-        trades.append(
-            {
-                "symbol": sym,
-                "entry": buy,
-                "exit": sell,
-                "pnl": sh * (sell - buy),
-                "ret": sell / buy - 1.0,
-                "bars": max(1, i - e_i),
-                "reason": reason,
-                "book": "mean_reversion",
-            }
-        )
-
     for i, dt in enumerate(dates):
-        equity = portfolio_value(i)
+        equity = book.portfolio_value(panel, i)
         curve.append((dt, equity))
         if i < lookback + 5:
             continue
@@ -185,16 +150,19 @@ def run_mean_reversion_baseline(
             rsi = float(_rsi(series, 14).iloc[-1])
             if pd.isna(rsi) or rsi > rsi_max:
                 continue
-            # Prefer deeper stretches (lower RSI → higher score)
             scores[sym] = 50.0 - rsi
 
         target = [s for s, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
         target_set = set(target)
-        for sym in list(holdings):
+        for sym in list(book.holdings):
             if sym not in target_set:
-                close_position(sym, i, "mr_rebalance" if target else "mr_cash")
+                book.close_position(sym, panel, i, "mr_rebalance" if target else "mr_cash", dt)
+                if sym in book.holdings:
+                    pass
+                elif book.trades:
+                    book.trades[-1]["book"] = "mean_reversion"
 
-        equity = portfolio_value(i)
+        equity = book.portfolio_value(panel, i)
         if not target:
             last_reb = i
             curve[-1] = (dt, equity)
@@ -204,38 +172,40 @@ def run_mean_reversion_baseline(
         target_value = equity / n
         for sym in target:
             px = float(panel.iloc[i][sym])
-            buy = px * (1 + cost_rt / 2)
-            desired_sh = target_value / buy
-            have = holdings.get(sym, 0.0)
+            have = book.holdings[sym].shares if sym in book.holdings else 0.0
+            desired_sh = target_value / max(px, 1e-9)
             if desired_sh > have + 1e-9:
-                need = desired_sh - have
-                cost = need * buy
-                if cost > cash:
-                    need = cash / buy
-                    cost = need * buy
-                if need <= 0:
-                    continue
-                cash -= cost
-                holdings[sym] = have + need
-                if sym not in entry_px:
-                    entry_px[sym] = px
-                    entry_i[sym] = i
+                book.buy(
+                    sym,
+                    desired_sh - have,
+                    px,
+                    trade_date=dt,
+                    bar_i=i,
+                    order_id=f"mr-buy-{sym}-{dt}",
+                    book="mean_reversion",
+                )
             elif have > desired_sh * 1.05:
-                sell_sh = have - desired_sh
-                sell = px * (1 - cost_rt / 2)
-                cash += sell_sh * sell
-                holdings[sym] = desired_sh
+                book.sell(
+                    sym,
+                    have - desired_sh,
+                    px,
+                    trade_date=dt,
+                    bar_i=i,
+                    order_id=f"mr-trim-{sym}-{dt}",
+                    reason="mr_rebalance_trim",
+                )
 
         last_reb = i
-        curve[-1] = (dt, portfolio_value(i))
+        curve[-1] = (dt, book.portfolio_value(panel, i))
 
-    if holdings:
+    if book.holdings:
         i = len(dates) - 1
-        for sym in list(holdings):
-            close_position(sym, i, "eod_flatten")
-        curve[-1] = (dates[-1], cash)
+        book.flatten(panel, i, "eod_flatten", dates[i])
+        curve[-1] = (dates[-1], book.cash)
 
-    return _finalize(strategy_id, trades, curve)
+    for t in book.trades:
+        t.setdefault("book", "mean_reversion")
+    return _finalize(strategy_id, book.trades, curve)
 
 
 def run_regime_adaptive_book(
@@ -265,8 +235,8 @@ def run_regime_adaptive_book(
     Regime must persist `regime_persist` bars before a book switch (hysteresis).
     """
     risk = risk or DEFAULT.risk
-    cost_rt = RiskEngine(risk).round_trip_cost_pct()  # PORTFOLIO_BT_COST_MODEL approx
-    _ = PORTFOLIO_BT_COST_MODEL
+    pbook = PortfolioChargeBook.create(initial_capital=initial_capital, risk=risk)
+    assert pbook.cost_model == PORTFOLIO_BT_COST_MODEL
     closes = {
         sym: df["Close"].astype(float)
         for sym, df in frames.items()
@@ -286,12 +256,6 @@ def run_regime_adaptive_book(
         vix_close = vix_aligned["Close"].astype(float)
 
     dates = list(panel.index)
-    cash = initial_capital
-    holdings: dict[str, float] = {}
-    entry_px: dict[str, float] = {}
-    entry_i: dict[str, int] = {}
-    entry_book: dict[str, str] = {}
-    trades: list[dict] = []
     curve: list[tuple] = []
     last_reb = -10_000
     peak_equity = initial_capital
@@ -304,38 +268,8 @@ def run_regime_adaptive_book(
     pending_count = 0
     trade_start_ts = pd.Timestamp(trade_start) if trade_start is not None else None
 
-    def portfolio_value(i: int) -> float:
-        value = cash
-        for sym, sh in holdings.items():
-            value += sh * float(panel.iloc[i][sym])
-        return value
-
-    def close_position(sym: str, i: int, reason: str) -> None:
-        nonlocal cash
-        sh = holdings.pop(sym)
-        px = float(panel.iloc[i][sym])
-        sell = px * (1 - cost_rt / 2)
-        cash += sh * sell
-        e_px = entry_px.pop(sym)
-        e_i = entry_i.pop(sym)
-        book = entry_book.pop(sym, "unknown")
-        buy = e_px * (1 + cost_rt / 2)
-        trades.append(
-            {
-                "symbol": sym,
-                "entry": buy,
-                "exit": sell,
-                "pnl": sh * (sell - buy),
-                "ret": sell / buy - 1.0,
-                "bars": max(1, i - e_i),
-                "reason": reason,
-                "book": book,
-            }
-        )
-
     def flatten_all(i: int, reason: str) -> None:
-        for sym in list(holdings):
-            close_position(sym, i, reason)
+        pbook.flatten(panel, i, reason, dates[i])
 
     def dual_mom_targets(i: int) -> list[str]:
         scores: dict[str, float] = {}
@@ -374,55 +308,57 @@ def run_regime_adaptive_book(
             scores[sym] = 50.0 - rsi
         return [s for s, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
 
-    def allocate(i: int, target: list[str], book: str) -> None:
-        nonlocal cash
+    def allocate(i: int, target: list[str], book_name: str) -> None:
+        dt = dates[i]
         target_set = set(target)
-        for sym in list(holdings):
+        for sym in list(pbook.holdings):
             if sym not in target_set:
-                close_position(sym, i, f"{book}_rebalance" if target else f"{book}_cash")
+                pbook.close_position(
+                    sym, panel, i, f"{book_name}_rebalance" if target else f"{book_name}_cash", dt
+                )
         if not target:
             return
-        equity = portfolio_value(i)
+        equity = pbook.portfolio_value(panel, i)
         n = len(target)
         target_value = equity / n
         for sym in target:
             px = float(panel.iloc[i][sym])
-            buy = px * (1 + cost_rt / 2)
-            desired_sh = target_value / buy
-            have = holdings.get(sym, 0.0)
+            have = pbook.holdings[sym].shares if sym in pbook.holdings else 0.0
+            desired_sh = target_value / max(px, 1e-9)
             if desired_sh > have + 1e-9:
-                need = desired_sh - have
-                cost = need * buy
-                if cost > cash:
-                    need = cash / buy
-                    cost = need * buy
-                if need <= 0:
-                    continue
-                cash -= cost
-                holdings[sym] = have + need
-                if sym not in entry_px:
-                    entry_px[sym] = px
-                    entry_i[sym] = i
-                    entry_book[sym] = book
+                pbook.buy(
+                    sym,
+                    desired_sh - have,
+                    px,
+                    trade_date=dt,
+                    bar_i=i,
+                    order_id=f"ad-buy-{sym}-{dt}",
+                    book=book_name,
+                )
             elif have > desired_sh * 1.05:
-                sell_sh = have - desired_sh
-                sell = px * (1 - cost_rt / 2)
-                cash += sell_sh * sell
-                holdings[sym] = desired_sh
+                pbook.sell(
+                    sym,
+                    have - desired_sh,
+                    px,
+                    trade_date=dt,
+                    bar_i=i,
+                    order_id=f"ad-trim-{sym}-{dt}",
+                    reason=f"{book_name}_trim",
+                )
 
     for i, dt in enumerate(dates):
-        equity = portfolio_value(i)
+        equity = pbook.portfolio_value(panel, i)
         curve.append((dt, equity))
         dd, peak_equity = drawdown_from_peak([equity], peak_equity)
 
         in_trade_window = trade_start_ts is None or pd.Timestamp(dt) >= trade_start_ts
         if max_portfolio_dd is not None and in_trade_window and dd <= max_portfolio_dd and not dd_halt:
-            if holdings:
+            if pbook.holdings:
                 flatten_all(i, "dd_killswitch")
-                curve[-1] = (dt, portfolio_value(i))
+                curve[-1] = (dt, pbook.portfolio_value(panel, i))
                 last_reb = i
             dd_halt = True
-            peak_equity = portfolio_value(i)
+            peak_equity = pbook.portfolio_value(panel, i)
             continue
         if dd_halt and i - last_reb >= bull_rebalance:
             dd_halt = False
@@ -487,7 +423,7 @@ def run_regime_adaptive_book(
 
         if book_switch:
             switches += 1
-            if holdings:
+            if pbook.holdings:
                 flatten_all(i, f"switch_{active_book}_to_{target_book}")
             active_book = target_book
 
@@ -496,7 +432,7 @@ def run_regime_adaptive_book(
         if active_book == "cash":
             flatten_all(i, cash_reason if not risk_on else "regime_cash")
             last_reb = i
-            curve[-1] = (dt, portfolio_value(i))
+            curve[-1] = (dt, pbook.portfolio_value(panel, i))
             continue
 
         if active_book == "dual_momentum":
@@ -507,13 +443,13 @@ def run_regime_adaptive_book(
             flatten_all(i, "unknown_book_cash")
 
         last_reb = i
-        curve[-1] = (dt, portfolio_value(i))
+        curve[-1] = (dt, pbook.portfolio_value(panel, i))
 
-    if holdings:
+    if pbook.holdings:
         i = len(dates) - 1
         flatten_all(i, "eod_flatten")
-        curve[-1] = (dates[-1], cash)
+        curve[-1] = (dates[-1], pbook.cash)
 
-    result = _finalize(strategy_id, trades, curve)
+    result = _finalize(strategy_id, pbook.trades, curve)
     diag = AdaptiveDiagnostics(regime_counts=regime_counts, book_counts=book_counts, switches=switches)
     return result, diag

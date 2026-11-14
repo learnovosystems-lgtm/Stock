@@ -360,13 +360,6 @@ def test_gst_base_excludes_stt_and_stamp():
     assert c.stt > 0 and c.stamp > 0
 
 
-def test_portfolio_bt_cost_model_flagged():
-    from ati.research.backtest import EVENT_BASELINE_COST_MODEL, PORTFOLIO_BT_COST_MODEL
-
-    assert EVENT_BASELINE_COST_MODEL == "charge_engine_fill_level"
-    assert "approximate" in PORTFOLIO_BT_COST_MODEL
-
-
 def test_paper_partial_exit_fee_alloc(tmp_path: Path):
     ledger = tmp_path / "dp3.db"
     eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=ledger)
@@ -457,7 +450,6 @@ def test_concurrent_dp_exactly_once(tmp_path: Path):
     from ati.engine.dp_ledger import try_record_dp_charge
 
     ledger = tmp_path / "dp_conc.db"
-    # Direct ledger race
     results: list[bool] = []
 
     def claim() -> bool:
@@ -474,7 +466,6 @@ def test_concurrent_dp_exactly_once(tmp_path: Path):
     assert sum(1 for r in results if r) == 1
     assert sum(1 for r in results if not r) == 31
 
-    # ChargeEngine path: concurrent sells → exactly one fill with dp == 12.5
     eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=tmp_path / "dp_eng.db")
     dps: list[float] = []
 
@@ -495,6 +486,135 @@ def test_concurrent_dp_exactly_once(tmp_path: Path):
         dps = [f.result() for f in futs]
     assert sum(1 for d in dps if d == 12.5) == 1
     assert sum(1 for d in dps if d == 0.0) == 23
+
+
+def test_dp_failed_fill_releases_reservation(tmp_path: Path):
+    """Failed sell must not permanently consume DP; retry can charge once."""
+    from ati.engine.dp_ledger import dp_already_charged
+
+    ledger = tmp_path / "dp_fail.db"
+    eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=ledger)
+    fill_id = "sell-attempt-1"
+    c = eng.charges_for_fill(
+        side=Side.SELL,
+        qty=10,
+        price=100,
+        segment=Segment.EQUITY_DELIVERY,
+        symbol="RELIANCE",
+        trade_date="2026-11-14",
+        defer_dp_confirm=True,
+        dp_fill_id=fill_id,
+        order_id=fill_id,
+    )
+    assert c.dp == 12.5
+    assert not dp_already_charged(
+        broker="fyers", instrument_id="RELIANCE", trade_date="2026-11-14", path=ledger
+    )
+    # Simulate failed fill commit
+    assert eng.release_dp_for_fill(
+        instrument_id="RELIANCE", trade_date="2026-11-14", fill_id=fill_id
+    )
+    # Retry succeeds and can confirm
+    fill2 = "sell-attempt-2"
+    c2 = eng.charges_for_fill(
+        side=Side.SELL,
+        qty=10,
+        price=100,
+        segment=Segment.EQUITY_DELIVERY,
+        symbol="RELIANCE",
+        trade_date="2026-11-14",
+        defer_dp_confirm=True,
+        dp_fill_id=fill2,
+        order_id=fill2,
+    )
+    assert c2.dp == 12.5
+    assert eng.confirm_dp_for_fill(
+        instrument_id="RELIANCE", trade_date="2026-11-14", fill_id=fill2
+    )
+    assert dp_already_charged(
+        broker="fyers", instrument_id="RELIANCE", trade_date="2026-11-14", path=ledger
+    )
+    # Third attempt: no DP
+    c3 = eng.charges_for_fill(
+        side=Side.SELL,
+        qty=5,
+        price=100,
+        segment=Segment.EQUITY_DELIVERY,
+        symbol="RELIANCE",
+        trade_date="2026-11-14",
+        order_id="sell-3",
+    )
+    assert c3.dp == 0.0
+
+
+def test_realistic_segment_examples_and_partial_exit(tmp_path: Path):
+    eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=tmp_path / "dp.db")
+    # Delivery
+    d_buy = eng.charges_for_fill(
+        side=Side.BUY, qty=100, price=2500, segment=Segment.EQUITY_DELIVERY, symbol="INFY"
+    )
+    d_sell = eng.charges_for_fill(
+        side=Side.SELL, qty=100, price=2600, segment=Segment.EQUITY_DELIVERY, symbol="INFY",
+        trade_date="2026-11-14",
+    )
+    assert d_buy.brokerage > 0 and d_sell.dp == 12.5 and d_sell.stt > 0
+    # Intraday
+    i_buy = eng.charges_for_fill(
+        side=Side.BUY, qty=100, price=2500, segment=Segment.EQUITY_INTRADAY, symbol="INFY"
+    )
+    i_sell = eng.charges_for_fill(
+        side=Side.SELL, qty=100, price=2510, segment=Segment.EQUITY_INTRADAY, symbol="INFY"
+    )
+    assert i_buy.stt == 0 and i_sell.dp == 0 and i_sell.stt > 0
+    # Futures
+    f_buy = eng.charges_for_fill(
+        side=Side.BUY, qty=50, price=25000, segment=Segment.FUTURES, symbol="NIFTY"
+    )
+    assert f_buy.clearing > 0 and f_buy.dp == 0
+    # Partial exits — DP once
+    eng2 = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=tmp_path / "dp2.db")
+    sess = eng2.new_session()
+    buy = eng2.economics_for_fill(
+        side=Side.BUY, qty=100, raw_price=1000, segment=Segment.EQUITY_DELIVERY,
+        session=sess, order_id="b1", symbol="TCS",
+    )
+    s1 = eng2.economics_for_fill(
+        side=Side.SELL, qty=40, raw_price=1100, segment=Segment.EQUITY_DELIVERY,
+        session=sess, order_id="s1", symbol="TCS", trade_date="2026-11-14",
+    )
+    s2 = eng2.economics_for_fill(
+        side=Side.SELL, qty=60, raw_price=1120, segment=Segment.EQUITY_DELIVERY,
+        session=sess, order_id="s2", symbol="TCS", trade_date="2026-11-14",
+    )
+    assert s1.charges.dp == 12.5 and s2.charges.dp == 0.0
+    rt = eng2.reconcile_round_trip(buy=buy, sells=[s1, s2])
+    assert abs(rt.net_pnl - (rt.gross_pnl - rt.total_fees - rt.total_slippage)) < 0.05
+
+
+def test_portfolio_book_cash_reconciliation(tmp_path: Path):
+    from ati.research.portfolio_charges import PortfolioChargeBook
+
+    book = PortfolioChargeBook.create(
+        initial_capital=100_000, dp_ledger_path=tmp_path / "dp.db", slippage_pct=0.0
+    )
+    start = book.cash
+    assert book.buy("AAA", 50, 1000, trade_date="2026-11-10", bar_i=0, order_id="b")
+    after_buy = book.cash
+    assert after_buy < start
+    buy_fees = start - after_buy - 50 * 1000  # fees portion of cash drop at raw=exec (slip 0)
+    t = book.sell(
+        "AAA", 50, 1100, trade_date="2026-11-14", bar_i=5, order_id="s", reason="exit"
+    )
+    assert t is not None
+    assert abs(t["pnl"] - (t["gross_pnl"] - t["fees"])) < 0.05
+    # Final cash = start - buy_cost + sell_proceeds_net_of_exit_fees
+    # With slip=0: start - 50*1000 - entry_fees + 50*1100 - exit_fees
+    expected = start - 50 * 1000 - t["entry_fees"] + 50 * 1100 - t["exit_fees"]
+    _approx(book.cash, expected, tol=0.05)
+    _approx(book.cash, start + t["gross_pnl"] - t["fees"], tol=0.05)
+    assert t["dp"] == 12.5
+    assert t["cost_model"] == "charge_engine_fill_level"
+    assert buy_fees == pytest.approx(t["entry_fees"], abs=0.05)
 
 
 def test_gst_charges_list_base_documented():
@@ -520,14 +640,21 @@ def test_gst_charges_list_base_documented():
     assert c.stt > 0 and c.stamp > 0
 
 
-def test_portfolio_bt_marked_approximate_w4_outstanding():
+def test_portfolio_bt_fill_level_charge_engine():
     from ati.research.adaptive import PORTFOLIO_BT_COST_MODEL as ADAPTIVE_FLAG
-    from ati.research.backtest import EVENT_BASELINE_COST_MODEL, PORTFOLIO_BT_COST_MODEL
+    from ati.research.backtest import (
+        EVENT_BASELINE_COST_MODEL,
+        PORTFOLIO_BT_COST_MODEL,
+        W4_OUTSTANDING_PORTFOLIO_BT,
+    )
+    from ati.research.portfolio_charges import PortfolioChargeBook
 
     assert EVENT_BASELINE_COST_MODEL == "charge_engine_fill_level"
-    assert "approximate" in PORTFOLIO_BT_COST_MODEL
-    assert PORTFOLIO_BT_COST_MODEL == ADAPTIVE_FLAG or "approximate" in ADAPTIVE_FLAG
+    assert PORTFOLIO_BT_COST_MODEL == "charge_engine_fill_level"
+    assert ADAPTIVE_FLAG == PORTFOLIO_BT_COST_MODEL
+    assert W4_OUTSTANDING_PORTFOLIO_BT is False
+    book = PortfolioChargeBook.create(initial_capital=100_000)
+    assert book.cost_model == "charge_engine_fill_level"
     info = ChargeEngine("fyers").schedule_info()
-    assert "w4_outstanding" in info
-    assert "approximate" in info["w4_outstanding"].lower()
-    assert "not fully complete" in info["w4_outstanding"].lower()
+    assert info.get("w4_outstanding") is None
+    assert info["portfolio_bt_cost_model"] == "charge_engine_fill_level"

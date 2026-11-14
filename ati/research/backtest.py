@@ -2,12 +2,9 @@
 
 Cost-model labels
 -----------------
-EVENT_BASELINE_COST_MODEL = fill-level ChargeEngine (delivery) — used by
-  run_breakout_momentum_baseline / run_pullback_trend_baseline.
-PORTFOLIO_BT_COST_MODEL = approximate blended round-trip %% via
-  ChargeEngine.round_trip_cost_pct applied half on buy/sell prices — used by
-  run_dual_momentum_baseline. Not fill-level ChargeEngine; outstanding W4 item.
-  Do not describe W4 as fully complete while this path remains approximate.
+EVENT_BASELINE_COST_MODEL = fill-level ChargeEngine (delivery) — event baselines.
+PORTFOLIO_BT_COST_MODEL = fill-level ChargeEngine via PortfolioChargeBook —
+  dual-momentum and adaptive portfolio paths.
 """
 
 from __future__ import annotations
@@ -21,10 +18,10 @@ from ati.config import RiskConfig, DEFAULT
 from ati.engine.risk import RiskEngine
 from ati.indicators.technical import enrich
 from ati.models.charges import Segment, Side
+from ati.research.portfolio_charges import PORTFOLIO_BT_COST_MODEL, PortfolioChargeBook
 
 EVENT_BASELINE_COST_MODEL = "charge_engine_fill_level"
-PORTFOLIO_BT_COST_MODEL = "approximate_charge_engine_rt_pct"
-W4_OUTSTANDING_PORTFOLIO_BT = True  # fill-level ChargeEngine not yet wired here
+W4_OUTSTANDING_PORTFOLIO_BT = False  # dual-mom + adaptive use fill-level ChargeEngine
 
 
 @dataclass
@@ -476,9 +473,8 @@ def run_dual_momentum_baseline(
     )
 
     risk = risk or DEFAULT.risk
-    # Approximate blended RT from ChargeEngine schedule (NOT fill-level / NOT DP-aware).
-    cost_rt = RiskEngine(risk).round_trip_cost_pct()
-    _ = PORTFOLIO_BT_COST_MODEL  # explicit non-fill-level cost path
+    book = PortfolioChargeBook.create(initial_capital=initial_capital, risk=risk)
+    assert book.cost_model == PORTFOLIO_BT_COST_MODEL == "charge_engine_fill_level"
 
     closes = {
         sym: df["Close"].astype(float)
@@ -516,47 +512,18 @@ def run_dual_momentum_baseline(
         vix_aligned = india_vix.reindex(panel.index).ffill()
 
     dates = list(panel.index)
-    cash = initial_capital
-    holdings: dict[str, float] = {}
-    entry_px: dict[str, float] = {}
-    entry_i: dict[str, int] = {}
-    trades: list[dict] = []
     curve: list[tuple] = []
     last_reb = -10_000
     peak_equity = initial_capital
     dd_halt = False
 
-    def portfolio_value(i: int) -> float:
-        value = cash
-        for sym, sh in holdings.items():
-            value += sh * float(panel.iloc[i][sym])
-        return value
-
     def close_position(sym: str, i: int, reason: str) -> None:
-        nonlocal cash
-        sh = holdings.pop(sym)
-        px = float(panel.iloc[i][sym])
-        sell = px * (1 - cost_rt / 2)
-        cash += sh * sell
-        e_px = entry_px.pop(sym)
-        e_i = entry_i.pop(sym)
-        buy = e_px * (1 + cost_rt / 2)
-        trades.append(
-            {
-                "symbol": sym,
-                "entry": buy,
-                "exit": sell,
-                "pnl": sh * (sell - buy),
-                "ret": sell / buy - 1.0,
-                "bars": max(1, i - e_i),
-                "reason": reason,
-            }
-        )
+        book.close_position(sym, panel, i, reason, dates[i])
 
     trade_start_ts = pd.Timestamp(trade_start) if trade_start is not None else None
 
     for i, dt in enumerate(dates):
-        equity = portfolio_value(i)
+        equity = book.portfolio_value(panel, i)
         curve.append((dt, equity))
         dd, peak_equity = drawdown_from_peak([equity], peak_equity)
 
@@ -564,15 +531,14 @@ def run_dual_momentum_baseline(
         # permanently lock the book (equity cannot recover vs an old peak while flat).
         in_trade_window = trade_start_ts is None or pd.Timestamp(dt) >= trade_start_ts
         if max_portfolio_dd is not None and in_trade_window and dd <= max_portfolio_dd and not dd_halt:
-            if holdings:
-                for sym in list(holdings):
+            if book.holdings:
+                for sym in list(book.holdings):
                     close_position(sym, i, "dd_killswitch")
-                curve[-1] = (dt, portfolio_value(i))
+                curve[-1] = (dt, book.portfolio_value(panel, i))
                 last_reb = i
             dd_halt = True
-            peak_equity = portfolio_value(i)  # new high-water mark after defensive flatten
+            peak_equity = book.portfolio_value(panel, i)
             continue
-        # Cool-off: stay flat for one rebalance cycle after a kill
         if dd_halt and i - last_reb >= rebalance_every:
             dd_halt = False
 
@@ -583,7 +549,6 @@ def run_dual_momentum_baseline(
         if i - last_reb < rebalance_every:
             continue
 
-        # Hard cash gates: NIFTY / VIX / breadth / DD halt
         risk_on = True
         cash_reason = "nifty_gate_cash"
         if nifty_sma_gate and nifty_aligned is not None:
@@ -602,10 +567,10 @@ def run_dual_momentum_baseline(
             cash_reason = "dd_halt_cash"
 
         if not risk_on:
-            for sym in list(holdings):
+            for sym in list(book.holdings):
                 close_position(sym, i, cash_reason)
             last_reb = i
-            curve[-1] = (dt, portfolio_value(i))
+            curve[-1] = (dt, book.portfolio_value(panel, i))
             continue
 
         scores: dict[str, float] = {}
@@ -631,11 +596,11 @@ def run_dual_momentum_baseline(
         target = [s for s, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
         target_set = set(target)
 
-        for sym in list(holdings):
+        for sym in list(book.holdings):
             if sym not in target_set:
                 close_position(sym, i, "rebalance" if target else "cash")
 
-        equity = portfolio_value(i)
+        equity = book.portfolio_value(panel, i)
         if not target:
             last_reb = i
             curve[-1] = (dt, equity)
@@ -643,48 +608,51 @@ def run_dual_momentum_baseline(
 
         n = len(target)
         target_value = equity / n
-        for sym in list(holdings):
+        for sym in list(book.holdings):
             if sym not in target_set:
                 continue
             px = float(panel.iloc[i][sym])
-            cur = holdings[sym] * px
+            lot = book.holdings[sym]
+            cur = lot.shares * px
             if cur > target_value * 1.05:
                 sell_sh = (cur - target_value) / px
-                sell = px * (1 - cost_rt / 2)
-                cash += sell_sh * sell
-                holdings[sym] -= sell_sh
+                book.sell(
+                    sym,
+                    sell_sh,
+                    px,
+                    trade_date=dt,
+                    bar_i=i,
+                    order_id=f"bt-trim-{sym}-{dt}",
+                    reason="rebalance_trim",
+                )
 
-        equity = portfolio_value(i)
+        equity = book.portfolio_value(panel, i)
         target_value = equity / n
         for sym in target:
             px = float(panel.iloc[i][sym])
-            buy = px * (1 + cost_rt / 2)
-            desired_sh = target_value / buy
-            have = holdings.get(sym, 0.0)
+            have = book.holdings[sym].shares if sym in book.holdings else 0.0
+            # Estimate desired shares using raw px; buy() applies ChargeEngine fees
+            desired_sh = target_value / max(px, 1e-9)
             if desired_sh > have + 1e-9:
                 need = desired_sh - have
-                cost = need * buy
-                if cost > cash:
-                    need = cash / buy
-                    cost = need * buy
-                if need <= 0:
-                    continue
-                cash -= cost
-                holdings[sym] = have + need
-                if sym not in entry_px:
-                    entry_px[sym] = px
-                    entry_i[sym] = i
+                book.buy(
+                    sym,
+                    need,
+                    px,
+                    trade_date=dt,
+                    bar_i=i,
+                    order_id=f"bt-buy-{sym}-{dt}",
+                )
 
         last_reb = i
-        curve[-1] = (dt, portfolio_value(i))
+        curve[-1] = (dt, book.portfolio_value(panel, i))
 
-    if holdings:
+    if book.holdings:
         i = len(dates) - 1
-        for sym in list(holdings):
-            close_position(sym, i, "eod_flatten")
-        curve[-1] = (dates[-1], cash)
+        book.flatten(panel, i, "eod_flatten", dates[i])
+        curve[-1] = (dates[-1], book.cash)
 
-    trade_log = pd.DataFrame(trades)
+    trade_log = pd.DataFrame(book.trades)
     eq = pd.Series({d: v for d, v in curve}).sort_index()
     if trade_log.empty or eq.empty:
         return empty

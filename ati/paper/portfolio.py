@@ -367,82 +367,98 @@ class PaperBroker:
             qty = p.qty * action.fraction
             if qty <= 0:
                 continue
-            # Each manage_exits slice is its own executed sell order; DP once/ISIN/day via session
+            # Reserve DP first; confirm only after fill commit; release on failure
             now = datetime.now(timezone.utc).isoformat()
-            eco = self.charges.economics_for_fill(
-                side=Side.SELL,
-                qty=qty,
-                raw_price=action.price,
-                segment=self.segment,
-                session=self.charge_session,
-                order_id=f"paper-sell-{p.symbol}-{action.reason.value}-{now}",
-                symbol=p.symbol,
-                trade_date=now,
-            )
-            gross = (eco.exec_price - p.entry) * qty
-            # Allocate remaining entry fees by remaining fraction closed this fill
-            frac_of_open = action.fraction / max(p.remaining_frac, 1e-9)
-            entry_fee_alloc = p.entry_fees * min(1.0, frac_of_open)
-            net = gross - eco.total_fees - entry_fee_alloc
-            acct = self.account()
-            new_frac = max(0.0, p.remaining_frac - action.fraction)
-            with self._conn() as cx:
-                cx.execute(
-                    "UPDATE account SET cash=?, updated_at=? WHERE id=1",
-                    (acct["cash"] + eco.cash_delta, now),
+            fill_id = f"paper-sell-{p.symbol}-{action.reason.value}-{now}"
+            eco = None
+            try:
+                eco = self.charges.economics_for_fill(
+                    side=Side.SELL,
+                    qty=qty,
+                    raw_price=action.price,
+                    segment=self.segment,
+                    session=self.charge_session,
+                    order_id=fill_id,
+                    symbol=p.symbol,
+                    trade_date=now,
+                    defer_dp_confirm=True,
+                    dp_fill_id=fill_id,
                 )
-                cx.execute(
-                    """
-                    INSERT INTO fills(ts, symbol, side, qty, price, pnl, note, fees, gross_pnl, net_pnl,
-                                      raw_price, schedule_id, segment, charges_json)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    """,
-                    (
-                        now,
-                        p.symbol,
-                        "SELL",
-                        qty,
-                        eco.exec_price,
-                        net,
-                        action.reason.value,
-                        eco.total_fees,
-                        gross,
-                        net,
-                        eco.raw_price,
-                        eco.charges.schedule_id,
-                        eco.charges.segment,
-                        json.dumps(eco.charges.to_dict()),
-                    ),
-                )
-                if new_frac <= 1e-9:
-                    cx.execute("DELETE FROM positions WHERE symbol=?", (p.symbol,))
-                else:
-                    hits = p.targets_hit
-                    if action.reason.value.startswith("TARGET"):
-                        idx = int(action.reason.value.split("_")[1]) - 1
-                        hits = ",".join([x for x in hits.split(",") if x] + [str(idx)])
-                    new_stop = action.new_stop if action.new_stop is not None else p.stop
-                    new_stop = tighten_stop(p.stop, new_stop, p.entry)
-                    remaining_entry_fees = max(0.0, p.entry_fees - entry_fee_alloc)
+                gross = (eco.exec_price - p.entry) * qty
+                frac_of_open = action.fraction / max(p.remaining_frac, 1e-9)
+                entry_fee_alloc = p.entry_fees * min(1.0, frac_of_open)
+                net = gross - eco.total_fees - entry_fee_alloc
+                acct = self.account()
+                new_frac = max(0.0, p.remaining_frac - action.fraction)
+                with self._conn() as cx:
+                    cx.execute(
+                        "UPDATE account SET cash=?, updated_at=? WHERE id=1",
+                        (acct["cash"] + eco.cash_delta, now),
+                    )
                     cx.execute(
                         """
-                        UPDATE positions SET remaining_frac=?, stop=?, targets_hit=?,
-                               realized_pnl=?, entry_fees=?, realized_fees=? WHERE symbol=?
+                        INSERT INTO fills(ts, symbol, side, qty, price, pnl, note, fees, gross_pnl, net_pnl,
+                                          raw_price, schedule_id, segment, charges_json)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         """,
                         (
-                            new_frac,
-                            new_stop,
-                            hits,
-                            p.realized_pnl + net,
-                            remaining_entry_fees,
-                            p.realized_fees + eco.total_fees,
+                            now,
                             p.symbol,
+                            "SELL",
+                            qty,
+                            eco.exec_price,
+                            net,
+                            action.reason.value,
+                            eco.total_fees,
+                            gross,
+                            net,
+                            eco.raw_price,
+                            eco.charges.schedule_id,
+                            eco.charges.segment,
+                            json.dumps(eco.charges.to_dict()),
                         ),
                     )
-            messages.append(
-                f"{p.symbol}: {action.reason.value} qty={qty:.2f} px={eco.exec_price:.2f} "
-                f"gross={gross:.2f} fees={eco.total_fees:.2f} net={net:.2f}"
-            )
+                    if new_frac <= 1e-9:
+                        cx.execute("DELETE FROM positions WHERE symbol=?", (p.symbol,))
+                    else:
+                        hits = p.targets_hit
+                        if action.reason.value.startswith("TARGET"):
+                            idx = int(action.reason.value.split("_")[1]) - 1
+                            hits = ",".join([x for x in hits.split(",") if x] + [str(idx)])
+                        new_stop = action.new_stop if action.new_stop is not None else p.stop
+                        new_stop = tighten_stop(p.stop, new_stop, p.entry)
+                        remaining_entry_fees = max(0.0, p.entry_fees - entry_fee_alloc)
+                        cx.execute(
+                            """
+                            UPDATE positions SET remaining_frac=?, stop=?, targets_hit=?,
+                                   realized_pnl=?, entry_fees=?, realized_fees=? WHERE symbol=?
+                            """,
+                            (
+                                new_frac,
+                                new_stop,
+                                hits,
+                                p.realized_pnl + net,
+                                remaining_entry_fees,
+                                p.realized_fees + eco.total_fees,
+                                p.symbol,
+                            ),
+                        )
+                if eco.charges.dp > 0:
+                    self.charges.confirm_dp_for_fill(
+                        instrument_id=p.symbol,
+                        trade_date=now,
+                        fill_id=fill_id,
+                        session=self.charge_session,
+                    )
+                messages.append(
+                    f"{p.symbol}: {action.reason.value} qty={qty:.2f} px={eco.exec_price:.2f} "
+                    f"gross={gross:.2f} fees={eco.total_fees:.2f} net={net:.2f}"
+                )
+            except Exception:
+                self.charges.release_dp_for_fill(
+                    instrument_id=p.symbol, trade_date=now, fill_id=fill_id
+                )
+                raise
         last_prices = {}
         for p in self.positions():
             sym_ns = p.symbol if p.symbol.endswith(".NS") else p.symbol + ".NS"

@@ -31,7 +31,13 @@ from pathlib import Path
 from typing import Sequence
 from zoneinfo import ZoneInfo
 
-from ati.engine.dp_ledger import dp_already_charged, try_record_dp_charge
+from ati.engine.dp_ledger import (
+    confirm_dp_charge,
+    dp_already_charged,
+    release_dp_charge,
+    reserve_dp_charge,
+    try_record_dp_charge,
+)
 
 from ati.models.charges import (
     BrokerId,
@@ -543,6 +549,9 @@ class ChargeEngine:
         session: ChargeSession | None = None,
         apply_dp: bool | None = None,
         event: str | None = None,
+        defer_dp_confirm: bool = False,
+        dp_fill_id: str | None = None,
+        persist_dp: bool = True,
     ) -> ChargeBreakdown:
         s = Side(side) if not isinstance(side, Side) else side
         seg = Segment(segment) if not isinstance(segment, Segment) else segment
@@ -597,31 +606,48 @@ class ChargeEngine:
         gst_base = brokerage + exchange_txn + clearing + sebi + ipft
         gst = gst_base * rates.gst_rate
 
-        # --- DP once per instrument/day (delivery sell only); atomic ledger claim ---
+        # --- DP once per instrument/day (delivery sell only); reserve / confirm ---
         dp = 0.0
         charge_dp = False
+        dp_reservation_fill_id: str | None = None
         if seg == Segment.EQUITY_DELIVERY and s == Side.SELL and rates.dp_flat > 0:
             if apply_dp is False:
                 charge_dp = False
+            elif not persist_dp:
+                # Caller supplies apply_dp True/False (e.g. shared DB transaction)
+                if apply_dp is None:
+                    raise ValueError("persist_dp=False requires explicit apply_dp")
+                charge_dp = bool(apply_dp)
             else:
                 if not instrument_id:
                     raise ValueError(
                         "Delivery sell requires ISIN or canonical symbol for DP "
                         "deduplication; refusing to bypass DP aggregation"
                     )
-                # Session fast-path: already claimed in this process
                 if session is not None and (instrument_id, td) in session._dp_charged:
                     charge_dp = False
                 else:
-                    # Atomic insert-or-ignore — only the winner debits DP
-                    won = try_record_dp_charge(
-                        broker=self.broker,
-                        instrument_id=instrument_id,
-                        trade_date=td,
-                        path=self.dp_ledger_path,
-                    )
+                    fid = dp_fill_id or order_id or f"dp-{instrument_id}-{td.isoformat()}"
+                    if defer_dp_confirm:
+                        won = reserve_dp_charge(
+                            broker=self.broker,
+                            instrument_id=instrument_id,
+                            trade_date=td,
+                            fill_id=fid,
+                            path=self.dp_ledger_path,
+                        )
+                        if won:
+                            dp_reservation_fill_id = fid
+                    else:
+                        won = try_record_dp_charge(
+                            broker=self.broker,
+                            instrument_id=instrument_id,
+                            trade_date=td,
+                            path=self.dp_ledger_path,
+                            fill_id=fid,
+                        )
                     charge_dp = won
-                    if won and session is not None:
+                    if won and session is not None and not defer_dp_confirm:
                         session._dp_charged.add((instrument_id, td))
             if charge_dp:
                 dp = rates.dp_flat
@@ -652,6 +678,9 @@ class ChargeEngine:
         other = _money(other)
         total = _money(brokerage + stt + exchange_txn + clearing + sebi + stamp + ipft + gst + dp + other)
 
+        notes = self.schedule.notes
+        if dp_reservation_fill_id:
+            notes = (notes + " | " if notes else "") + f"dp_pending_fill_id={dp_reservation_fill_id}"
         return ChargeBreakdown(
             broker=self.schedule.broker,
             schedule_id=self.schedule.schedule_id,
@@ -677,7 +706,42 @@ class ChargeEngine:
             trade_date=td.isoformat(),
             brokerage_order_total=_money(brokerage_order_total),
             source_urls=self.schedule.source_urls,
-            notes=self.schedule.notes,
+            notes=notes,
+        )
+
+    def confirm_dp_for_fill(
+        self,
+        *,
+        instrument_id: str,
+        trade_date: date | datetime | str | None,
+        fill_id: str,
+        session: ChargeSession | None = None,
+    ) -> bool:
+        td = _parse_trade_date(trade_date)
+        ok = confirm_dp_charge(
+            broker=self.broker,
+            instrument_id=instrument_id,
+            trade_date=td,
+            fill_id=fill_id,
+            path=self.dp_ledger_path,
+        )
+        if ok and session is not None:
+            session._dp_charged.add((instrument_id.upper(), td))
+        return ok
+
+    def release_dp_for_fill(
+        self,
+        *,
+        instrument_id: str,
+        trade_date: date | datetime | str | None,
+        fill_id: str,
+    ) -> bool:
+        return release_dp_charge(
+            broker=self.broker,
+            instrument_id=canonical_instrument_id(None, instrument_id) or instrument_id,
+            trade_date=_parse_trade_date(trade_date),
+            fill_id=fill_id,
+            path=self.dp_ledger_path,
         )
 
     def _exchange_txn_pct(self, seg: Segment, rates: _SegmentRates) -> float:
@@ -856,6 +920,9 @@ class ChargeEngine:
         trade_date: date | datetime | str | None = None,
         apply_dp: bool | None = None,
         event: str | None = None,
+        defer_dp_confirm: bool = False,
+        dp_fill_id: str | None = None,
+        persist_dp: bool = True,
     ) -> FillEconomics:
         s = Side(side) if not isinstance(side, Side) else side
         exec_px = self.slipped_price(raw_price, s) if apply_slippage else float(raw_price)
@@ -871,6 +938,9 @@ class ChargeEngine:
             session=session,
             apply_dp=apply_dp,
             event=event,
+            defer_dp_confirm=defer_dp_confirm,
+            dp_fill_id=dp_fill_id,
+            persist_dp=persist_dp,
         )
         notional = exec_px * float(qty)
         slip_rupees = abs(exec_px - float(raw_price)) * float(qty)
@@ -1002,11 +1072,8 @@ class ChargeEngine:
                 "Statutory KB still cites ₹10/crore (equity/FUT) and ₹50/crore (options) — "
                 "not used. BSE IPFT=0."
             ),
-            "w4_outstanding": (
-                "Portfolio dual-momentum/adaptive backtests still use approximate "
-                "blended RT %% (PORTFOLIO_BT_COST_MODEL); not fill-level ChargeEngine. "
-                "W4 is not fully complete while those paths remain approximate."
-            ),
+            "w4_outstanding": None,
+            "portfolio_bt_cost_model": "charge_engine_fill_level",
         }
 
 
