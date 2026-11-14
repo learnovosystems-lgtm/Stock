@@ -22,8 +22,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
 from typing import Sequence
 from zoneinfo import ZoneInfo
+
+from ati.engine.dp_ledger import dp_already_charged, record_dp_charge
 
 from ati.models.charges import (
     BrokerId,
@@ -75,6 +78,9 @@ class FeeSchedule:
     futures: _SegmentRates
     equity_options: _SegmentRates
     mutual_fund: _SegmentRates
+    # Segment rates.exchange_txn_pct are NSE defaults. BSE equity override from charges-list.
+    supported_exchanges: tuple[str, ...] = ("NSE", "BSE")
+    bse_equity_exchange_txn_pct: float = 0.00375 / 100.0  # fyers.in/charges-list
     # Optional event rates (applied only when event requested)
     call_and_trade: float = 50.0
     admin_square_off: float = 50.0
@@ -83,6 +89,16 @@ class FeeSchedule:
     account_opening: float = 0.0
     amc: float = 0.0
     notes: str = ""
+    # GST taxable base (official FYERS charges-list): brokerage + exchange txn +
+    # clearing + SEBI + IPFT (+ DP when charged). NOT STT. NOT stamp duty.
+    gst_base_components: tuple[str, ...] = (
+        "brokerage",
+        "exchange_txn",
+        "clearing",
+        "sebi",
+        "ipft",
+        "dp",
+    )
 
 
 def _fyers_standard_2026_04_01() -> FeeSchedule:
@@ -319,7 +335,17 @@ def _parse_as_of(as_of: date | datetime | str | None) -> date:
     return date.fromisoformat(str(as_of)[:10])
 
 
-def resolve_schedule(broker: str, as_of: date | datetime | str | None = None) -> FeeSchedule:
+def resolve_schedule(
+    broker: str,
+    as_of: date | datetime | str | None = None,
+    *,
+    allow_assumed: bool = False,
+) -> FeeSchedule:
+    """Resolve versioned fee schedule.
+
+    FYERS Standard is pinned from 2026-04-01. Dates before that raise unless
+    allow_assumed=True (explicitly flags an assumed/unsupported historical use).
+    """
     broker_l = (broker or BrokerId.FYERS.value).strip().lower()
     d = _parse_as_of(as_of)
     matches = [
@@ -328,7 +354,18 @@ def resolve_schedule(broker: str, as_of: date | datetime | str | None = None) ->
         if s.broker == broker_l and s.effective_date <= d and (s.end_date is None or d < s.end_date)
     ]
     if not matches:
-        raise ValueError(f"No fee schedule for broker={broker_l!r} as_of={d.isoformat()}")
+        if allow_assumed:
+            # Caller opted in — use earliest schedule and mark via notes (caller must flag)
+            candidates = [s for s in _SCHEDULES if s.broker == broker_l]
+            if not candidates:
+                raise ValueError(f"No fee schedule for broker={broker_l!r}")
+            candidates.sort(key=lambda s: s.effective_date)
+            return candidates[0]
+        raise ValueError(
+            f"No verified fee schedule for broker={broker_l!r} as_of={d.isoformat()}. "
+            f"FYERS Standard begins 2026-04-01; pass allow_assumed=True only when the "
+            f"backtest explicitly flags an assumed schedule."
+        )
     matches.sort(key=lambda s: s.effective_date)
     return matches[-1]
 
@@ -358,12 +395,17 @@ def _brokerage_for_turnover(rates: _SegmentRates, turnover: float) -> float:
     return _money(min(rates.brokerage_flat, pct_amt))
 
 
-def _normalize_isin(isin: str | None, symbol: str | None = None) -> str | None:
-    if isin:
-        return isin.strip().upper()
-    if symbol:
-        return symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+def canonical_instrument_id(isin: str | None = None, symbol: str | None = None) -> str | None:
+    """Prefer ISIN; else canonical symbol (exchange suffix stripped)."""
+    if isin and str(isin).strip():
+        return str(isin).strip().upper()
+    if symbol and str(symbol).strip():
+        return str(symbol).replace(".NS", "").replace(".BO", "").strip().upper()
     return None
+
+
+def _normalize_isin(isin: str | None, symbol: str | None = None) -> str | None:
+    return canonical_instrument_id(isin, symbol)
 
 
 def _parse_trade_date(trade_date: date | datetime | str | None) -> date:
@@ -432,18 +474,37 @@ class ChargeEngine:
         as_of: date | datetime | str | None = None,
         slippage_pct: float = 0.0005,
         exchange: str = "NSE",
+        allow_assumed_schedule: bool = False,
+        dp_ledger_path: Path | None = None,
     ):
         self.broker = (broker or BrokerId.FYERS.value).strip().lower()
         self.as_of = _parse_as_of(as_of)
         self.slippage_pct = float(slippage_pct)
-        self.exchange = exchange
-        self.schedule = resolve_schedule(self.broker, self.as_of)
+        self.exchange = (exchange or "NSE").strip().upper()
+        self.allow_assumed_schedule = allow_assumed_schedule
+        self.dp_ledger_path = dp_ledger_path
+        self.schedule = resolve_schedule(
+            self.broker, self.as_of, allow_assumed=allow_assumed_schedule
+        )
+        if self.exchange not in self.schedule.supported_exchanges:
+            raise ValueError(
+                f"Unsupported exchange {self.exchange!r} for broker={self.broker}. "
+                f"Supported: {self.schedule.supported_exchanges}"
+            )
+        self.assumed_schedule = allow_assumed_schedule and self.as_of < self.schedule.effective_date
 
     def new_session(self) -> ChargeSession:
         return ChargeSession(self)
 
     def with_as_of(self, as_of: date | datetime | str | None) -> "ChargeEngine":
-        return ChargeEngine(self.broker, as_of=as_of, slippage_pct=self.slippage_pct, exchange=self.exchange)
+        return ChargeEngine(
+            self.broker,
+            as_of=as_of,
+            slippage_pct=self.slippage_pct,
+            exchange=self.exchange,
+            allow_assumed_schedule=self.allow_assumed_schedule,
+            dp_ledger_path=self.dp_ledger_path,
+        )
 
     def slipped_price(self, price: float, side: Side | str) -> float:
         s = Side(side) if not isinstance(side, Side) else side
@@ -478,7 +539,7 @@ class ChargeEngine:
 
         turnover = qty * price
         td = _parse_trade_date(trade_date)
-        isin_key = _normalize_isin(isin, symbol)
+        instrument_id = canonical_instrument_id(isin, symbol)
 
         # --- Brokerage (order-level) ---
         oid = order_id or f"__anon_{id(object())}_{s.value}_{seg.value}_{turnover}"
@@ -508,10 +569,12 @@ class ChargeEngine:
         elif s == Side.SELL and rates.stt_on_sell:
             stt = turnover * rates.stt_pct
 
-        exchange_txn = turnover * rates.exchange_txn_pct
+        exchange_txn_pct = self._exchange_txn_pct(seg, rates)
+        exchange_txn = turnover * exchange_txn_pct
         clearing = turnover * rates.clearing_pct
         sebi = turnover * (rates.sebi_per_crore / CRORE)
-        ipft = turnover * (rates.ipft_per_crore / CRORE)
+        # IPFT applies to NSE only (FYERS charges-list / statutory KB)
+        ipft = turnover * (rates.ipft_per_crore / CRORE) if self.exchange == "NSE" else 0.0
         stamp = turnover * rates.stamp_pct_buy if s == Side.BUY else 0.0
 
         # GST base per FYERS charges-list: brokerage + exch + clearing + SEBI + IPFT
@@ -519,22 +582,40 @@ class ChargeEngine:
         gst_base = brokerage + exchange_txn + clearing + sebi + ipft
         gst = gst_base * rates.gst_rate
 
-        # --- DP once per ISIN per day (delivery sell only) ---
+        # --- DP once per instrument/day (delivery sell only); persisted across restarts ---
         dp = 0.0
         if seg == Segment.EQUITY_DELIVERY and s == Side.SELL and rates.dp_flat > 0:
-            charge_dp = False
-            if apply_dp is True:
-                charge_dp = True
-            elif apply_dp is False:
+            if apply_dp is False:
                 charge_dp = False
-            elif session is not None and isin_key:
-                key = (isin_key, td)
-                if key not in session._dp_charged:
-                    charge_dp = True
-                    session._dp_charged.add(key)
-            elif session is None:
-                # No session: treat as first debit of the day for this call
-                charge_dp = True if apply_dp is None else bool(apply_dp)
+            else:
+                if not instrument_id:
+                    raise ValueError(
+                        "Delivery sell requires ISIN or canonical symbol for DP "
+                        "deduplication; refusing to bypass DP aggregation"
+                    )
+                already = False
+                if session is not None and (instrument_id, td) in session._dp_charged:
+                    already = True
+                if not already and dp_already_charged(
+                    broker=self.broker,
+                    instrument_id=instrument_id,
+                    trade_date=td,
+                    path=self.dp_ledger_path,
+                ):
+                    already = True
+                if apply_dp is True:
+                    charge_dp = not already
+                else:
+                    charge_dp = not already
+                if charge_dp:
+                    if session is not None:
+                        session._dp_charged.add((instrument_id, td))
+                    record_dp_charge(
+                        broker=self.broker,
+                        instrument_id=instrument_id,
+                        trade_date=td,
+                        path=self.dp_ledger_path,
+                    )
             if charge_dp:
                 dp = rates.dp_flat
                 if rates.dp_gst:
@@ -585,11 +666,172 @@ class ChargeEngine:
             other=other,
             total_fees=total,
             order_id=order_id,
-            isin=isin_key,
+            isin=instrument_id,
             trade_date=td.isoformat(),
             brokerage_order_total=_money(brokerage_order_total),
             source_urls=self.schedule.source_urls,
             notes=self.schedule.notes,
+        )
+
+    def _exchange_txn_pct(self, seg: Segment, rates: _SegmentRates) -> float:
+        if self.exchange == "NSE":
+            return rates.exchange_txn_pct
+        if self.exchange == "BSE":
+            if seg in (Segment.FUTURES, Segment.EQUITY_OPTIONS):
+                raise ValueError(
+                    "BSE F&O exchange transaction rates are not configured in this schedule; "
+                    "refusing to apply NSE rates to BSE derivatives"
+                )
+            if seg in (Segment.EQUITY_DELIVERY, Segment.EQUITY_INTRADAY):
+                return self.schedule.bse_equity_exchange_txn_pct
+            raise ValueError(f"Unsupported BSE segment {seg}")
+        raise ValueError(f"Unsupported exchange {self.exchange}")
+
+    def estimate_economics_for_fill(
+        self,
+        *,
+        side: Side | str,
+        qty: float,
+        raw_price: float,
+        segment: Segment | str = Segment.EQUITY_DELIVERY,
+        apply_slippage: bool = True,
+        isin: str | None = None,
+        symbol: str | None = None,
+        trade_date: date | datetime | str | None = None,
+        assume_dp_charged: bool | None = None,
+    ) -> FillEconomics:
+        """Non-mutating estimate for MTM / dashboard — never touches order session or DP ledger writes.
+
+        assume_dp_charged:
+          True  → do not include DP in estimate
+          False → include DP in estimate
+          None  → peek persisted ledger (read-only); include DP only if not yet charged
+        """
+        s = Side(side) if not isinstance(side, Side) else side
+        seg = Segment(segment) if not isinstance(segment, Segment) else segment
+        exec_px = self.slipped_price(raw_price, s) if apply_slippage else float(raw_price)
+        apply_dp: bool | None
+        if seg == Segment.EQUITY_DELIVERY and s == Side.SELL:
+            instrument_id = canonical_instrument_id(isin, symbol)
+            if not instrument_id:
+                raise ValueError("MTM delivery exit estimate requires ISIN or symbol")
+            if assume_dp_charged is True:
+                apply_dp = False
+            elif assume_dp_charged is False:
+                apply_dp = True
+            else:
+                td = _parse_trade_date(trade_date)
+                already = dp_already_charged(
+                    broker=self.broker,
+                    instrument_id=instrument_id,
+                    trade_date=td,
+                    path=self.dp_ledger_path,
+                )
+                apply_dp = not already
+        else:
+            apply_dp = False
+        # Isolated session so brokerage aggregation is not shared with live paper session
+        iso = self.new_session()
+        # For estimate DP we pass apply_dp explicitly; charges_for_fill still persists when True.
+        # Use a dry path: compute via internal helper that skips ledger write.
+        return self._economics_estimate(
+            side=s,
+            qty=qty,
+            exec_px=exec_px,
+            raw_price=float(raw_price),
+            segment=seg,
+            isin=isin,
+            symbol=symbol,
+            trade_date=trade_date,
+            include_dp=bool(apply_dp),
+            session=iso,
+        )
+
+    def _economics_estimate(
+        self,
+        *,
+        side: Side,
+        qty: float,
+        exec_px: float,
+        raw_price: float,
+        segment: Segment,
+        isin: str | None,
+        symbol: str | None,
+        trade_date: date | datetime | str | None,
+        include_dp: bool,
+        session: ChargeSession,
+    ) -> FillEconomics:
+        """Fill economics without persisting DP (estimate-only)."""
+        rates = _rates_for(self.schedule, segment)
+        turnover = float(qty) * exec_px
+        td = _parse_trade_date(trade_date)
+        instrument_id = canonical_instrument_id(isin, symbol)
+        brokerage = _brokerage_for_turnover(rates, turnover)
+        stt = 0.0
+        if side == Side.BUY and rates.stt_on_buy:
+            stt = turnover * rates.stt_pct
+        elif side == Side.SELL and rates.stt_on_sell:
+            stt = turnover * rates.stt_pct
+        exchange_txn = turnover * self._exchange_txn_pct(segment, rates)
+        clearing = turnover * rates.clearing_pct
+        sebi = turnover * (rates.sebi_per_crore / CRORE)
+        ipft = turnover * (rates.ipft_per_crore / CRORE) if self.exchange == "NSE" else 0.0
+        stamp = turnover * rates.stamp_pct_buy if side == Side.BUY else 0.0
+        gst_base = brokerage + exchange_txn + clearing + sebi + ipft
+        gst = gst_base * rates.gst_rate
+        dp = 0.0
+        if include_dp and segment == Segment.EQUITY_DELIVERY and side == Side.SELL and rates.dp_flat > 0:
+            dp = rates.dp_flat
+            if rates.dp_gst:
+                gst += rates.dp_flat * rates.gst_rate
+        brokerage = _money(brokerage)
+        stt = _money(stt)
+        exchange_txn = _money(exchange_txn)
+        clearing = _money(clearing)
+        sebi = _money(sebi)
+        stamp = _money(stamp)
+        ipft = _money(ipft)
+        gst = _money(gst)
+        dp = _money(dp)
+        total = _money(brokerage + stt + exchange_txn + clearing + sebi + stamp + ipft + gst + dp)
+        charges = ChargeBreakdown(
+            broker=self.schedule.broker,
+            schedule_id=self.schedule.schedule_id,
+            effective_date=self.schedule.effective_date.isoformat(),
+            segment=segment.value,
+            side=side.value,
+            qty=float(qty),
+            price=exec_px,
+            turnover=_money(turnover),
+            brokerage=brokerage,
+            stt=stt,
+            exchange_txn=exchange_txn,
+            clearing=clearing,
+            sebi=sebi,
+            stamp=stamp,
+            ipft=ipft,
+            gst=gst,
+            dp=dp,
+            other=0.0,
+            total_fees=total,
+            order_id=None,
+            isin=instrument_id,
+            trade_date=td.isoformat(),
+            brokerage_order_total=brokerage,
+            source_urls=self.schedule.source_urls,
+            notes="estimate_only; DP/order state not mutated",
+        )
+        notional = exec_px * float(qty)
+        slip_rupees = abs(exec_px - raw_price) * float(qty)
+        cash_delta = -(notional + total) if side == Side.BUY else (notional - total)
+        return FillEconomics(
+            raw_price=raw_price,
+            exec_price=exec_px,
+            slippage_rupees=_money(slip_rupees),
+            charges=charges,
+            notional=_money(notional),
+            total_fees=total,
+            cash_delta=_money(cash_delta),
         )
 
     def economics_for_fill(
@@ -735,11 +977,16 @@ class ChargeEngine:
             "notes": s.notes,
             "as_of": self.as_of.isoformat(),
             "slippage_pct": self.slippage_pct,
+            "exchange": self.exchange,
+            "supported_exchanges": list(s.supported_exchanges),
+            "assumed_schedule": self.assumed_schedule,
             "account_opening": s.account_opening,
             "amc": s.amc,
+            "gst_base_components": list(s.gst_base_components),
+            "gst_excludes": ["stt", "stamp"],
             "ipft_policy": (
-                "equity/futures ₹0.01 per crore from fyers.in/charges-list; "
-                "KB cites ₹10/crore — charges-list used"
+                "NSE equity/futures ₹0.01 per crore from fyers.in/charges-list; "
+                "KB cites ₹10/crore — charges-list used; BSE IPFT=0"
             ),
         }
 
@@ -749,6 +996,9 @@ def default_charge_engine(
     *,
     slippage_pct: float | None = None,
     as_of: date | datetime | str | None = None,
+    exchange: str = "NSE",
+    allow_assumed_schedule: bool = False,
+    dp_ledger_path: Path | None = None,
 ) -> ChargeEngine:
     from ati.config import DEFAULT
 
@@ -756,4 +1006,7 @@ def default_charge_engine(
         broker or DEFAULT.charges_broker,
         as_of=as_of,
         slippage_pct=DEFAULT.risk.slippage_pct if slippage_pct is None else slippage_pct,
+        exchange=exchange,
+        allow_assumed_schedule=allow_assumed_schedule,
+        dp_ledger_path=dp_ledger_path,
     )

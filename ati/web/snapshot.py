@@ -38,22 +38,19 @@ def _mtm_positions(broker, provider: MarketDataProvider) -> list[dict[str, Any]]
         last = float(df["Close"].iloc[-1]) if df is not None and len(df) else p.entry
         qty_open = p.qty * p.remaining_frac
         entry_fee_left = float(getattr(p, "entry_fees", 0.0) or 0.0)
-        # Estimated net if exited now: exit slippage + sell fees + remaining entry fees
-        session = getattr(broker, "charge_session", None) or charges.new_session()
-        est_sell = charges.economics_for_fill(
+        # Independent estimate — must NOT mutate paper charge_session / DP ledger
+        est_sell = charges.estimate_economics_for_fill(
             side=Side.SELL,
             qty=qty_open,
             raw_price=last,
             segment=segment,
             apply_slippage=True,
-            session=session,
-            order_id=f"mtm-est-{p.symbol}",
             symbol=p.symbol,
         )
         gross_mark = (last - p.entry) * qty_open
-        # Gross at slipped exit vs entry (fees excluded)
         gross_slipped = (est_sell.exec_price - p.entry) * qty_open
-        est_net = gross_slipped - est_sell.total_fees - entry_fee_left
+        exit_fees_est = est_sell.total_fees
+        est_net = gross_slipped - exit_fees_est - entry_fee_left
         pnl_pct = last / p.entry - 1.0 if p.entry else 0.0
         out.append(
             {
@@ -71,9 +68,15 @@ def _mtm_positions(broker, provider: MarketDataProvider) -> list[dict[str, Any]]
                 "unrealized_pnl": round(gross_mark, 2),
                 "unrealized_gross": round(gross_mark, 2),
                 "unrealized_gross_slipped": round(gross_slipped, 2),
-                "unrealized_fees_est": round(est_sell.total_fees + entry_fee_left, 2),
+                "exit_slippage_est": round(est_sell.slippage_rupees, 2),
+                "exit_fees_est": round(exit_fees_est, 2),
+                "remaining_entry_fees": round(entry_fee_left, 2),
+                "unrealized_fees_est": round(exit_fees_est + entry_fee_left, 2),
                 "unrealized_slippage_est": round(est_sell.slippage_rupees, 2),
                 "unrealized_net_est": round(est_net, 2),
+                "liquidation_value_est": round(
+                    est_sell.exec_price * qty_open - exit_fees_est, 2
+                ),
                 "unrealized_pct": round(pnl_pct, 4),
                 "entry_fees": round(entry_fee_left, 2),
                 "strategy": p.strategy,
@@ -231,13 +234,28 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
         "account": {
             "cash": round(acct["cash"], 2),
             "equity_book": round(acct["equity"], 2),
+            # Gross mark-to-market: cash + last*qty (no exit fees/slippage)
             "equity_mtm": round(mtm_equity, 2),
+            "equity_mtm_gross": round(mtm_equity, 2),
+            # Estimated liquidation: cash + slipped exit proceeds − exit fees
+            "equity_liquidation_est": round(
+                float(acct["cash"])
+                + sum(float(p.get("liquidation_value_est") or 0) for p in positions),
+                2,
+            ),
+            "unrealized_net_est_total": round(
+                sum(float(p.get("unrealized_net_est") or 0) for p in positions), 2
+            ),
             "day_pnl": round(acct["day_pnl"], 2),
             "open_positions": len(positions),
             "starting_capital": 100_000.0,
             "mtm_return": round(mtm_equity / 100_000.0 - 1.0, 4),
             "charges_broker": acct.get("charges_broker"),
             "charges_schedule": acct.get("charges_schedule"),
+            "pnl_basis": {
+                "equity_mtm": "gross mark (cash + last×qty)",
+                "equity_liquidation_est": "cash + estimated net exit proceeds",
+            },
         },
         "positions": positions,
         "charges": (

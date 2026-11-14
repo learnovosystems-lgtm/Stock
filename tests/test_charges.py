@@ -66,10 +66,14 @@ def test_fyers_not_zerodha_and_ipft_from_charges_list():
     assert "0.01" in fy.notes and "10/crore" in fy.notes
 
 
-def test_equity_delivery_charges():
-    eng = ChargeEngine("fyers", slippage_pct=0.0, as_of="2026-11-14")
-    buy = eng.charges_for_fill(side=Side.BUY, qty=100, price=1000.0, segment=Segment.EQUITY_DELIVERY)
-    sell = eng.charges_for_fill(side=Side.SELL, qty=100, price=1100.0, segment=Segment.EQUITY_DELIVERY)
+def test_equity_delivery_charges(tmp_path: Path):
+    eng = ChargeEngine("fyers", slippage_pct=0.0, as_of="2026-11-14", dp_ledger_path=tmp_path / "dp.db")
+    buy = eng.charges_for_fill(
+        side=Side.BUY, qty=100, price=1000.0, segment=Segment.EQUITY_DELIVERY, symbol="AAA"
+    )
+    sell = eng.charges_for_fill(
+        side=Side.SELL, qty=100, price=1100.0, segment=Segment.EQUITY_DELIVERY, symbol="AAA"
+    )
     _approx(buy.brokerage, 20.0)
     _approx(sell.brokerage, 20.0)
     _approx(buy.stt, 100.0)
@@ -161,8 +165,8 @@ def test_brokerage_aggregation_across_partial_fills():
     _approx(a.brokerage + b.brokerage, 40.0)
 
 
-def test_dp_once_per_isin_per_day_and_different_isins():
-    eng = ChargeEngine("fyers", slippage_pct=0.0)
+def test_dp_once_per_isin_per_day_and_different_isins(tmp_path: Path):
+    eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=tmp_path / "dp.db")
     sess = eng.new_session()
     s1 = eng.charges_for_fill(
         side=Side.SELL, qty=40, price=1100, segment=Segment.EQUITY_DELIVERY,
@@ -210,8 +214,8 @@ def test_gst_rounding_and_ipft():
     assert big.ipft == pytest.approx(0.01)
 
 
-def test_partial_and_complete_exit_reconciliation():
-    eng = ChargeEngine("fyers", slippage_pct=0.0)
+def test_partial_and_complete_exit_reconciliation(tmp_path: Path):
+    eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=tmp_path / "dp.db")
     sess = eng.new_session()
     buy = eng.economics_for_fill(
         side=Side.BUY, qty=100, raw_price=1000, segment=Segment.EQUITY_DELIVERY,
@@ -234,15 +238,136 @@ def test_partial_and_complete_exit_reconciliation():
     assert s1.charges.brokerage > 0 and s2.charges.brokerage > 0
 
 
-def test_reject_oversell_and_segment_mismatch():
-    eng = ChargeEngine("fyers", slippage_pct=0.0)
-    buy = eng.economics_for_fill(side=Side.BUY, qty=10, raw_price=100, segment=Segment.EQUITY_DELIVERY)
-    sell = eng.economics_for_fill(side=Side.SELL, qty=11, raw_price=110, segment=Segment.EQUITY_DELIVERY)
+def test_reject_oversell_and_segment_mismatch(tmp_path: Path):
+    eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=tmp_path / "dp.db")
+    buy = eng.economics_for_fill(
+        side=Side.BUY, qty=10, raw_price=100, segment=Segment.EQUITY_DELIVERY, symbol="AAA"
+    )
+    sell = eng.economics_for_fill(
+        side=Side.SELL, qty=11, raw_price=110, segment=Segment.EQUITY_DELIVERY, symbol="AAA"
+    )
     with pytest.raises(ValueError, match="exceeds"):
         eng.reconcile_round_trip(buy=buy, sells=[sell])
-    sell_i = eng.economics_for_fill(side=Side.SELL, qty=10, raw_price=110, segment=Segment.EQUITY_INTRADAY)
+    sell_i = eng.economics_for_fill(
+        side=Side.SELL, qty=10, raw_price=110, segment=Segment.EQUITY_INTRADAY, symbol="AAA"
+    )
     with pytest.raises(ValueError, match="segment"):
         eng.reconcile_round_trip(buy=buy, sells=[sell_i])
+
+
+def test_missing_isin_raises_on_delivery_sell():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    with pytest.raises(ValueError, match="ISIN or canonical"):
+        eng.charges_for_fill(side=Side.SELL, qty=10, price=100, segment=Segment.EQUITY_DELIVERY)
+
+
+def test_dp_persists_across_engine_restarts(tmp_path: Path):
+    ledger = tmp_path / "dp.db"
+    eng1 = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=ledger)
+    s1 = eng1.charges_for_fill(
+        side=Side.SELL, qty=10, price=100, segment=Segment.EQUITY_DELIVERY,
+        symbol="RELIANCE", trade_date="2026-11-14", order_id="a",
+    )
+    assert s1.dp == 12.5
+    eng2 = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=ledger)
+    s2 = eng2.charges_for_fill(
+        side=Side.SELL, qty=5, price=100, segment=Segment.EQUITY_DELIVERY,
+        symbol="RELIANCE", trade_date="2026-11-14", order_id="b",
+    )
+    assert s2.dp == 0.0
+
+
+def test_mtm_estimate_does_not_mutate_session_or_dp(tmp_path: Path):
+    ledger = tmp_path / "dp2.db"
+    eng = ChargeEngine("fyers", slippage_pct=0.001, dp_ledger_path=ledger)
+    sess = eng.new_session()
+    # Real sell charges DP
+    real = eng.economics_for_fill(
+        side=Side.SELL, qty=10, raw_price=1000, segment=Segment.EQUITY_DELIVERY,
+        session=sess, order_id="REAL", symbol="AAA", trade_date="2026-11-14",
+    )
+    assert real.charges.dp == 12.5
+    orders_before = dict(sess._orders)
+    dp_before = set(sess._dp_charged)
+    est = eng.estimate_economics_for_fill(
+        side=Side.SELL, qty=10, raw_price=1000, segment=Segment.EQUITY_DELIVERY,
+        symbol="AAA", trade_date="2026-11-14",
+    )
+    assert est.charges.dp == 0.0  # already charged — estimate peeks ledger
+    assert sess._orders == orders_before
+    assert sess._dp_charged == dp_before
+    assert est.slippage_rupees > 0
+
+
+def test_historical_schedule_boundaries():
+    with pytest.raises(ValueError, match="2026-04-01|No verified"):
+        ChargeEngine("fyers", as_of="2026-03-31")
+    ok = ChargeEngine("fyers", as_of="2026-04-01")
+    assert ok.schedule.effective_date.isoformat() == "2026-04-01"
+    assumed = ChargeEngine("fyers", as_of="2025-01-01", allow_assumed_schedule=True)
+    assert assumed.assumed_schedule is True
+
+
+def test_exchange_selection_and_rejection():
+    nse = ChargeEngine("fyers", slippage_pct=0.0, exchange="NSE")
+    bse = ChargeEngine("fyers", slippage_pct=0.0, exchange="BSE")
+    n = nse.charges_for_fill(
+        side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY, symbol="X"
+    )
+    b = bse.charges_for_fill(
+        side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY, symbol="X"
+    )
+    assert b.exchange_txn != n.exchange_txn
+    with pytest.raises(ValueError, match="Unsupported exchange"):
+        ChargeEngine("fyers", exchange="MCX")
+    with pytest.raises(ValueError, match="BSE F&O"):
+        bse.charges_for_fill(side=Side.BUY, qty=1, price=100, segment=Segment.FUTURES, symbol="X")
+
+
+def test_gst_base_excludes_stt_and_stamp():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    c = eng.charges_for_fill(
+        side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY, symbol="X"
+    )
+    info = eng.schedule_info()
+    assert "stt" in info["gst_excludes"] and "stamp" in info["gst_excludes"]
+    expected = (c.brokerage + c.exchange_txn + c.clearing + c.sebi + c.ipft) * 0.18
+    _approx(c.gst, expected, tol=0.02)
+    # STT and stamp are positive but not in GST base
+    assert c.stt > 0 and c.stamp > 0
+
+
+def test_portfolio_bt_cost_model_flagged():
+    from ati.research.backtest import EVENT_BASELINE_COST_MODEL, PORTFOLIO_BT_COST_MODEL
+
+    assert EVENT_BASELINE_COST_MODEL == "charge_engine_fill_level"
+    assert "approximate" in PORTFOLIO_BT_COST_MODEL
+
+
+def test_paper_partial_exit_fee_alloc(tmp_path: Path):
+    ledger = tmp_path / "dp3.db"
+    eng = ChargeEngine("fyers", slippage_pct=0.0, dp_ledger_path=ledger)
+    broker = PaperBroker(
+        db_path=tmp_path / "paper.db",
+        allowed_strategy_substrings=(),
+        charges=eng,
+    )
+    ok, msg = broker.try_enter(_opp())
+    assert ok, msg
+    pos = broker.positions()[0]
+    entry_fees = pos.entry_fees
+    # Simulate first partial via charges session (manage_exits needs bars)
+    sell = eng.economics_for_fill(
+        side=Side.SELL, qty=20, raw_price=1040, segment=Segment.EQUITY_DELIVERY,
+        session=broker.charge_session, order_id="px1", symbol="TEST.NS", trade_date="2026-11-14",
+    )
+    assert sell.charges.dp == 12.5
+    sell2 = eng.economics_for_fill(
+        side=Side.SELL, qty=20, raw_price=1040, segment=Segment.EQUITY_DELIVERY,
+        session=broker.charge_session, order_id="px2", symbol="TEST.NS", trade_date="2026-11-14",
+    )
+    assert sell2.charges.dp == 0.0
+    assert entry_fees > 0
 
 
 def test_slippage_not_in_fee_lines():

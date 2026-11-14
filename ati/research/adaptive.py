@@ -1,4 +1,9 @@
-"""Regime-adaptive multi-strategy book — auto-switches by market situation."""
+"""Regime-adaptive multi-strategy book — auto-switches by market situation.
+
+Cost model: approximate blended round-trip %% via ChargeEngine.round_trip_cost_pct
+(same as PORTFOLIO_BT_COST_MODEL in ati.research.backtest). Not fill-level;
+DP / order brokerage aggregation not applied trade-by-trade.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +15,7 @@ import pandas as pd
 from ati.config import DEFAULT, RiskConfig
 from ati.engine.risk import RiskEngine
 from ati.models.opportunity import MarketRegime
-from ati.research.backtest import BacktestResult
+from ati.research.backtest import PORTFOLIO_BT_COST_MODEL, BacktestResult
 from ati.research.gates import (
     drawdown_from_peak,
     india_vix_elevated,
@@ -113,7 +118,8 @@ def run_mean_reversion_baseline(
 ) -> BacktestResult:
     """Standalone mean-reversion book for SIDEWAYS regimes (stretch → mean)."""
     risk = risk or DEFAULT.risk
-    cost_rt = RiskEngine(risk).round_trip_cost_pct()
+    cost_rt = RiskEngine(risk).round_trip_cost_pct()  # PORTFOLIO_BT_COST_MODEL approx
+    _ = PORTFOLIO_BT_COST_MODEL
     closes = {
         sym: df["Close"].astype(float)
         for sym, df in frames.items()
@@ -259,7 +265,8 @@ def run_regime_adaptive_book(
     Regime must persist `regime_persist` bars before a book switch (hysteresis).
     """
     risk = risk or DEFAULT.risk
-    cost_rt = RiskEngine(risk).round_trip_cost_pct()
+    cost_rt = RiskEngine(risk).round_trip_cost_pct()  # PORTFOLIO_BT_COST_MODEL approx
+    _ = PORTFOLIO_BT_COST_MODEL
     closes = {
         sym: df["Close"].astype(float)
         for sym, df in frames.items()

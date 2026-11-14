@@ -1,4 +1,14 @@
-"""Event-driven swing backtest with ChargeEngine net cost model."""
+"""Event-driven swing backtest with ChargeEngine net cost model.
+
+Cost-model labels
+-----------------
+EVENT_BASELINE_COST_MODEL = fill-level ChargeEngine (delivery) — used by
+  run_breakout_momentum_baseline / run_pullback_trend_baseline.
+PORTFOLIO_BT_COST_MODEL = approximate blended round-trip %% via
+  ChargeEngine.round_trip_cost_pct applied half on buy/sell prices — used by
+  run_dual_momentum_baseline. Not fill-level; flagged explicitly (not claimed
+  as full ChargeEngine consistency).
+"""
 
 from __future__ import annotations
 
@@ -11,6 +21,9 @@ from ati.config import RiskConfig, DEFAULT
 from ati.engine.risk import RiskEngine
 from ati.indicators.technical import enrich
 from ati.models.charges import Segment, Side
+
+EVENT_BASELINE_COST_MODEL = "charge_engine_fill_level"
+PORTFOLIO_BT_COST_MODEL = "approximate_charge_engine_rt_pct"
 
 
 @dataclass
@@ -462,7 +475,9 @@ def run_dual_momentum_baseline(
     )
 
     risk = risk or DEFAULT.risk
+    # Approximate blended RT from ChargeEngine schedule (NOT fill-level / NOT DP-aware).
     cost_rt = RiskEngine(risk).round_trip_cost_pct()
+    _ = PORTFOLIO_BT_COST_MODEL  # explicit non-fill-level cost path
 
     closes = {
         sym: df["Close"].astype(float)
