@@ -1,16 +1,16 @@
 {
-  "generated_at": "2026-11-13T11:30:02.934813+00:00",
+  "generated_at": "2026-11-14T11:26:33.643565+00:00",
   "market_open": false,
   "brand": "ATI Desk",
-  "tagline": "Adaptive Indian equities \u2014 paper \u20b91L",
+  "tagline": "Adaptive Indian equities \u2014 Zerodha live + paper",
   "regime": {
     "regime": "BULL",
     "confidence": 0.616,
-    "nifty_trend": 0.0284,
-    "india_vix": 15.41,
+    "nifty_trend": 0.029,
+    "india_vix": 15.5,
     "breadth": 0.84,
     "adx": 39.94,
-    "notes": "Positive 63d NIFTY with strong ADX and breadth; MA stack not fully aligned \u2014 reduced confidence; HMM state=0:SIDEWAYS conf=0.61",
+    "notes": "Positive 63d NIFTY with strong ADX and breadth; MA stack not fully aligned \u2014 reduced confidence; HMM state=0:SIDEWAYS conf=0.62",
     "preferred_families": [
       "momentum",
       "relative_strength",
@@ -19,7 +19,7 @@
       "pullback",
       "multi_factor"
     ],
-    "nifty_last": 25129.80078125
+    "nifty_last": 25144.30078125
   },
   "account": {
     "cash": 33894.85,
@@ -35,11 +35,14 @@
       "symbol": "COFORGE",
       "qty": 33,
       "entry": 2003.19,
+      "buy": 2003.19,
+      "sell": 2140.0,
       "last": 2028.0,
       "stop": 1972.0,
       "t1": 2140.0,
       "t2": 2196.0,
       "t3": 2294.87,
+      "rr": 4.39,
       "unrealized_pnl": 818.85,
       "unrealized_pct": 0.0124,
       "strategy": "dual_momentum_v2",
@@ -47,68 +50,196 @@
       "bars_held": 0
     }
   ],
+  "zerodha": {
+    "connected": false,
+    "source": "sample",
+    "message": "Zerodha credentials not bound \u2014 showing sample layout. Bind KITE_API_KEY + KITE_ACCESS_TOKEN.",
+    "equity": null,
+    "positions": [],
+    "orders": [],
+    "fetched_at": "2026-11-14T11:26:33.642515+00:00",
+    "total_pnl": 0,
+    "total_day_pnl": 0
+  },
   "opportunities": [
-    {
-      "stock": "COFORGE",
-      "signal": "BUY",
-      "score": 72.5,
-      "strategy": "dual_momentum_v2",
-      "entry": 2001.585009765625,
-      "stop": 1972.0,
-      "t1": 2140.0,
-      "rr": 4.678551446523433,
-      "sector": "IT"
-    },
-    {
-      "stock": "PERSISTENT",
-      "signal": "BUY",
-      "score": 71.7,
-      "strategy": "dual_momentum_v2",
-      "entry": 5923.925,
-      "stop": 5884.0,
-      "t1": 6251.544632796906,
-      "rr": 8.205876838995717,
-      "sector": "IT"
-    },
     {
       "stock": "TECHM",
       "signal": "BUY",
-      "score": 67.9,
+      "score": 67.8,
+      "quality_grade": "A",
+      "quality_score": 76.1,
+      "quality_reasons": [
+        "RR 2.65 OK",
+        "family OOS Sharpe 0.73"
+      ],
+      "evidence_sharpe": 0.729,
+      "evidence_stability": 0.486,
       "strategy": "ensemble:relative_strength+trend_following",
-      "entry": 1764.0,
+      "sector": "IT",
+      "current": 1764.0,
+      "buy": 1764.0,
+      "buy_low": 1737.54,
+      "buy_high": 1778.11,
+      "sell": 1834.11,
+      "sell_t2": 1880.86,
+      "sell_t3": 1950.97,
       "stop": 1737.54,
-      "t1": 1834.1135903712407,
-      "rr": 2.6497955544686533,
-      "sector": "IT"
+      "rr": 2.65,
+      "qty": 19,
+      "capital": 33516.0,
+      "risk_rs": 502.74,
+      "holding": "21-63 trading days",
+      "why": "Index trend gate plus absolute/relative momentum aims to stay in cash during broad bear phases that previously destroyed active books.",
+      "risk_note": "Whipsaw around SMA200; late re-entry after sharp bottoms.",
+      "invalidation": "Stop 1737.54; or NIFTY closes below SMA200",
+      "entry_justification": "NIFTY>SMA200 gate ON; dual mom abs~84d 19.8%, RS 14.6%, non-chase entry | Entry checklist passed",
+      "exit_justification": "ATR trail; exit if NIFTY loses SMA200 or absolute momentum flips",
+      "timestamp": "2026-11-14T11:26:24.657517+00:00"
     },
     {
       "stock": "HCLTECH",
       "signal": "BUY",
-      "score": 65.0,
+      "score": 66.7,
+      "quality_grade": "A",
+      "quality_score": 74.9,
+      "quality_reasons": [
+        "RR 2.81 OK",
+        "family OOS Sharpe 0.73"
+      ],
+      "evidence_sharpe": 0.729,
+      "evidence_stability": 0.486,
       "strategy": "ensemble:relative_strength+trend_following",
-      "entry": 1378.0,
+      "sector": "IT",
+      "current": 1378.0,
+      "buy": 1378.0,
+      "buy_low": 1357.33,
+      "buy_high": 1389.02,
+      "sell": 1435.99,
+      "sell_t2": 1474.65,
+      "sell_t3": 1532.63,
       "stop": 1357.33,
-      "t1": 1435.9879131036248,
-      "rr": 2.8054142769049153,
-      "sector": "IT"
+      "rr": 2.81,
+      "qty": 24,
+      "capital": 33072.0,
+      "risk_rs": 496.08,
+      "holding": "21-63 trading days",
+      "why": "Index trend gate plus absolute/relative momentum aims to stay in cash during broad bear phases that previously destroyed active books.",
+      "risk_note": "Whipsaw around SMA200; late re-entry after sharp bottoms.",
+      "invalidation": "Stop 1357.33; or NIFTY closes below SMA200",
+      "entry_justification": "NIFTY>SMA200 gate ON; dual mom abs~84d 20.4%, RS 15.1%, non-chase entry | Entry checklist passed",
+      "exit_justification": "ATR trail; exit if NIFTY loses SMA200 or absolute momentum flips",
+      "timestamp": "2026-11-14T11:26:23.976979+00:00"
     },
     {
       "stock": "KOTAKBANK",
       "signal": "WAIT",
-      "score": 61.6,
+      "score": 61.5,
+      "quality_grade": "B",
+      "quality_score": 69.8,
+      "quality_reasons": [
+        "RR 2.23 OK",
+        "family OOS Sharpe 0.73"
+      ],
+      "evidence_sharpe": 0.729,
+      "evidence_stability": 0.486,
       "strategy": "relative_strength_v1",
-      "entry": 487.08433782958986,
-      "stop": 468.10808652798096,
-      "t1": 529.4337903229443,
-      "rr": 2.2317080344400733,
-      "sector": "PRIVATE_BANK"
+      "sector": "PRIVATE_BANK",
+      "current": 488.55,
+      "buy": 487.08,
+      "buy_low": 482.69,
+      "buy_high": 491.48,
+      "sell": 529.43,
+      "sell_t2": 549.88,
+      "sell_t3": 570.32,
+      "stop": 468.11,
+      "rr": 2.23,
+      "qty": 0,
+      "capital": 0.0,
+      "risk_rs": 0.0,
+      "holding": "5-30 trading days",
+      "why": "Leaders relative to NIFTY and strong sectors historically concentrate upside in Indian swings.",
+      "risk_note": "Factor reversal / index catch-up; RS leaders can correct sharply.",
+      "invalidation": "RS turns negative or stop 468.11 hit",
+      "entry_justification": "RS vs NIFTY 21.6%, sector strength -0.7%, above SMA50 | Overextended \u2014 wait for pullback toward ideal entry",
+      "exit_justification": "Exit when RS percentile fades or ATR trail hit",
+      "timestamp": "2026-11-14T11:26:20.247208+00:00"
+    }
+  ],
+  "actionable": [
+    {
+      "stock": "TECHM",
+      "signal": "BUY",
+      "score": 67.8,
+      "quality_grade": "A",
+      "quality_score": 76.1,
+      "quality_reasons": [
+        "RR 2.65 OK",
+        "family OOS Sharpe 0.73"
+      ],
+      "evidence_sharpe": 0.729,
+      "evidence_stability": 0.486,
+      "strategy": "ensemble:relative_strength+trend_following",
+      "sector": "IT",
+      "current": 1764.0,
+      "buy": 1764.0,
+      "buy_low": 1737.54,
+      "buy_high": 1778.11,
+      "sell": 1834.11,
+      "sell_t2": 1880.86,
+      "sell_t3": 1950.97,
+      "stop": 1737.54,
+      "rr": 2.65,
+      "qty": 19,
+      "capital": 33516.0,
+      "risk_rs": 502.74,
+      "holding": "21-63 trading days",
+      "why": "Index trend gate plus absolute/relative momentum aims to stay in cash during broad bear phases that previously destroyed active books.",
+      "risk_note": "Whipsaw around SMA200; late re-entry after sharp bottoms.",
+      "invalidation": "Stop 1737.54; or NIFTY closes below SMA200",
+      "entry_justification": "NIFTY>SMA200 gate ON; dual mom abs~84d 19.8%, RS 14.6%, non-chase entry | Entry checklist passed",
+      "exit_justification": "ATR trail; exit if NIFTY loses SMA200 or absolute momentum flips",
+      "timestamp": "2026-11-14T11:26:24.657517+00:00"
+    },
+    {
+      "stock": "HCLTECH",
+      "signal": "BUY",
+      "score": 66.7,
+      "quality_grade": "A",
+      "quality_score": 74.9,
+      "quality_reasons": [
+        "RR 2.81 OK",
+        "family OOS Sharpe 0.73"
+      ],
+      "evidence_sharpe": 0.729,
+      "evidence_stability": 0.486,
+      "strategy": "ensemble:relative_strength+trend_following",
+      "sector": "IT",
+      "current": 1378.0,
+      "buy": 1378.0,
+      "buy_low": 1357.33,
+      "buy_high": 1389.02,
+      "sell": 1435.99,
+      "sell_t2": 1474.65,
+      "sell_t3": 1532.63,
+      "stop": 1357.33,
+      "rr": 2.81,
+      "qty": 24,
+      "capital": 33072.0,
+      "risk_rs": 496.08,
+      "holding": "21-63 trading days",
+      "why": "Index trend gate plus absolute/relative momentum aims to stay in cash during broad bear phases that previously destroyed active books.",
+      "risk_note": "Whipsaw around SMA200; late re-entry after sharp bottoms.",
+      "invalidation": "Stop 1357.33; or NIFTY closes below SMA200",
+      "entry_justification": "NIFTY>SMA200 gate ON; dual mom abs~84d 20.4%, RS 15.1%, non-chase entry | Entry checklist passed",
+      "exit_justification": "ATR trail; exit if NIFTY loses SMA200 or absolute momentum flips",
+      "timestamp": "2026-11-14T11:26:23.976979+00:00"
     }
   ],
   "scan": {
     "regime": "BULL",
-    "regime_notes": "Positive 63d NIFTY with strong ADX and breadth; MA stack not fully aligned \u2014 reduced confidence; HMM state=0:SIDEWAYS conf=0.61; NIFTY>SMA200=ON; VIX<18=ON; breadth=0.92; risk_on=ON",
-    "scanned": 50,
-    "generated_at": "2026-11-13T11:29:23.354561+00:00"
+    "regime_notes": "Positive 63d NIFTY with strong ADX and breadth; MA stack not fully aligned \u2014 reduced confidence; HMM state=0:SIDEWAYS conf=0.62; NIFTY>SMA200=ON; VIX<18=ON; breadth=0.97; risk_on=ON",
+    "scanned": 30,
+    "generated_at": "2026-11-14T11:26:25.271088+00:00"
   },
   "production": [
     {
@@ -151,16 +282,6 @@
     }
   ],
   "metrics": [
-    {
-      "strategy_id": "regime_adaptive_multi",
-      "version": "1.0.0-regime-switch",
-      "sharpe": -0.56,
-      "total_return": -0.188,
-      "max_drawdown": -0.219,
-      "stability": 0.322,
-      "trades": 11,
-      "oos": false
-    },
     {
       "strategy_id": "dual_momentum_nifty_gated",
       "version": "wf_4fold_lb84_rb42",
@@ -270,6 +391,16 @@
       "stability": 0.486,
       "trades": 12,
       "oos": true
+    },
+    {
+      "strategy_id": "dual_momentum_nifty_gated",
+      "version": "wf_3fold_lb84_rb42",
+      "sharpe": 0.729,
+      "total_return": 0.046,
+      "max_drawdown": -0.063,
+      "stability": 0.486,
+      "trades": 12,
+      "oos": true
     }
   ],
   "universe_size": 119,
@@ -281,6 +412,13 @@
       "dual_momentum_nifty_gated",
       "regime_adaptive_multi"
     ],
-    "note": "Walk-forward OOS promoted sleeves; paper entries gated to measured families."
-  }
+    "note": "Suggestions graded A/B/C using OOS family evidence + RR\u22652. Zerodha live P&L when KITE_* secrets are bound."
+  },
+  "efficiency_roadmap": [
+    "Bind Zerodha KITE_API_KEY + KITE_ACCESS_TOKEN for live broker P&L",
+    "Run `ati.cli watch` for continuous opportunity refresh",
+    "Prefer grade A/B BUY only \u2014 demote families with negative OOS",
+    "Expand universe via universe_extra.csv after liquidity filters",
+    "Add intraday confirmation cadence during NSE hours"
+  ]
 }

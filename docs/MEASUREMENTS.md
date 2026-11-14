@@ -160,6 +160,24 @@ Full-sample adaptive: Sharpe **0.61**, return **+38%**, DD −21% (was −0.56 /
 
 Dual-mom promotion unchanged (still production).
 
+## Efficiency & roadmap (what to add next)
+
+| Gap | Fix in motion / next |
+|-----|----------------------|
+| Broker sync | **Zerodha Kite** live positions + P&L via `KITE_API_KEY` + `KITE_ACCESS_TOKEN` |
+| Continuous ideas | `ati.cli watch` / desk **Analyze now** → graded feed with buy/sell/SL/RR |
+| Suggestion quality | A/B/C grades blend live score + OOS family Sharpe/stability; RR&lt;2 demoted |
+| Universe scale | Keep liquid ~120; expand with liquidity filters (not raw 5000) |
+| Intraday | Hourly refresh during NSE hours; kite quotes for open P&L |
+| Robustness | Only promote sleeves that clear walk-forward; demote negative OOS families |
+
+## 2026-11-14 — Phase 9 (Zerodha + continuous graded opportunities)
+
+- Zerodha adapter + desk panel for live avg buy / LTP / P&L / day P&L
+- Continuous analysis feed: every opportunity carries **buy, sell (T1), stop, RR, T2/T3, grade**
+- Quality overlay uses promoted OOS evidence
+- Commands: `zerodha-status`, `analyze`, `watch`
+
 ## 2026-11-13 — Phase 8 (ATI Desk web dashboard + live paper host)
 
 ### Deliverable

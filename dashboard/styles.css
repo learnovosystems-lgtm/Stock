@@ -253,6 +253,61 @@ td { font-family: var(--font-mono); font-size: 0.84rem; }
 .metric .v { font-family: var(--font-mono); font-size: 1.2rem; margin-top: 0.25rem; }
 .metric .s { font-size: 0.8rem; color: var(--ink-soft); margin-top: 0.2rem; word-break: break-word; }
 
+.z-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.z-summary span {
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+}
+.grade {
+  display: inline-block;
+  min-width: 1.6rem;
+  text-align: center;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 0.1rem 0.35rem;
+}
+.grade-A { background: #d8f5c8; color: #165a2b; }
+.grade-B { background: #e7eef8; color: #1f3a5f; }
+.grade-C { background: #f3efe6; color: #6a4b16; }
+.grade-WATCH { background: #f1e4e4; color: #7a1f1f; }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.card-opp {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  background: var(--paper-2);
+}
+.card-opp h3 {
+  font-family: var(--font-display);
+  margin: 0 0 0.35rem;
+  font-size: 1.15rem;
+}
+.card-opp dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.75rem;
+  margin: 0.5rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+.card-opp dt { color: var(--ink-soft); }
+.card-opp dd { margin: 0; }
+
 .log-block pre {
   margin: 0;
   max-height: 220px;

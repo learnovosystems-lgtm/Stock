@@ -8,7 +8,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from ati.brokers.zerodha import fetch_live_snapshot
 from ati.config import REPORTS_DIR, ROOT, ensure_dirs
+from ati.ops.continuous import run_analysis_pass
 from ati.ops.session import run_eod, run_intrasession_once
 from ati.web.snapshot import build_snapshot, write_snapshot
 
@@ -95,6 +97,34 @@ class DeskHandler(SimpleHTTPRequestHandler):
                     json.dumps(snap, indent=2, default=str)
                 )
                 self._json(200, snap)
+                return
+            if parsed.path == "/api/zerodha":
+                self._json(200, fetch_live_snapshot().to_dict())
+                return
+            if parsed.path == "/api/analyze" and post:
+                limit = int(qs.get("limit", ["80"])[0])
+                feed = run_analysis_pass(limit=limit)
+                snap = build_snapshot(run_scan=False)
+                (DASHBOARD_DIR / "data").mkdir(parents=True, exist_ok=True)
+                (DASHBOARD_DIR / "data" / "snapshot.json").write_text(
+                    json.dumps(snap, indent=2, default=str)
+                )
+                self._json(200, {"feed": feed, "snapshot": snap})
+                return
+            if parsed.path == "/api/opportunities":
+                feed_path = REPORTS_DIR / "opportunities_latest.json"
+                if feed_path.exists():
+                    self._json(200, json.loads(feed_path.read_text()))
+                    return
+                snap = build_snapshot(run_scan=True, limit_scan=60)
+                self._json(
+                    200,
+                    {
+                        "opportunities": snap.get("opportunities", []),
+                        "actionable": snap.get("actionable", []),
+                        "generated_at": snap.get("generated_at"),
+                    },
+                )
                 return
             self._json(404, {"error": f"unknown api {parsed.path}"})
         except Exception as exc:  # noqa: BLE001

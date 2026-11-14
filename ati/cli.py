@@ -408,6 +408,48 @@ def regime_cmd():
     )
 
 
+@app.command("analyze")
+def analyze(
+    limit: int = typer.Option(80, help="Universe limit"),
+):
+    """One-shot continuous analysis: graded opportunities with buy/sell/RR/SL."""
+    from ati.ops.continuous import run_analysis_pass
+
+    feed = run_analysis_pass(limit=limit, progress=_progress)
+    console.print_json(
+        data={
+            "generated_at": feed["generated_at"],
+            "counts": feed["counts"],
+            "actionable": feed["actionable"][:10],
+        }
+    )
+
+
+@app.command("watch")
+def watch(
+    interval: int = typer.Option(300, help="Seconds between analysis cycles"),
+    limit: int = typer.Option(80, help="Universe limit"),
+    cycles: int = typer.Option(0, help="Stop after N cycles (0=forever)"),
+):
+    """Continuous opportunity analysis loop (buy/sell/RR/SL feed)."""
+    from ati.ops.continuous import run_continuous
+
+    run_continuous(
+        interval_sec=interval,
+        limit=limit,
+        cycles=cycles,
+        progress=_progress,
+    )
+
+
+@app.command("zerodha-status")
+def zerodha_status():
+    """Fetch live Zerodha positions / P&L (requires KITE_* env secrets)."""
+    from ati.brokers.zerodha import fetch_live_snapshot
+
+    console.print_json(data=fetch_live_snapshot().to_dict())
+
+
 @app.command("desk-snapshot")
 def desk_snapshot(
     scan: bool = typer.Option(True, help="Run live scanner while building snapshot"),
