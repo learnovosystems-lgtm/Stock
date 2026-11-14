@@ -5,11 +5,17 @@ from __future__ import annotations
 import json
 import traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from ati.brokers.zerodha import fetch_live_snapshot
 from ati.config import REPORTS_DIR, ROOT, ensure_dirs
+from ati.journal.store import (
+    journal_close,
+    journal_open,
+    journal_update_entry,
+    list_journal,
+    list_suggestions,
+    performance_stats,
+)
 from ati.ops.continuous import run_analysis_pass
 from ati.ops.session import run_eod, run_intrasession_once
 from ati.web.snapshot import build_snapshot, write_snapshot
@@ -21,7 +27,7 @@ class DeskHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(DASHBOARD_DIR), **kwargs)
 
-    def log_message(self, fmt: str, *args) -> None:  # quieter
+    def log_message(self, fmt: str, *args) -> None:
         print(f"[desk] {args[0] if args else fmt}")
 
     def _json(self, code: int, payload: dict) -> None:
@@ -33,6 +39,16 @@ class DeskHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
+
+    def _body(self) -> dict:
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0:
+            return {}
+        raw = self.rfile.read(length)
+        try:
+            return json.loads(raw.decode() or "{}")
+        except Exception:  # noqa: BLE001
+            return {}
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_response(204)
@@ -82,7 +98,7 @@ class DeskHandler(SimpleHTTPRequestHandler):
                     from ati.ops.session import is_market_open
 
                     out = run_intrasession_once() if is_market_open() else run_eod()
-                snap = build_snapshot(run_scan=True, limit_scan=60)
+                snap = build_snapshot(run_scan=False)
                 (DASHBOARD_DIR / "data").mkdir(parents=True, exist_ok=True)
                 (DASHBOARD_DIR / "data" / "snapshot.json").write_text(
                     json.dumps(snap, indent=2, default=str)
@@ -90,7 +106,7 @@ class DeskHandler(SimpleHTTPRequestHandler):
                 self._json(200, {"session": out, "snapshot": snap})
                 return
             if parsed.path == "/api/refresh" and post:
-                path = write_snapshot(limit_scan=80)
+                path = write_snapshot(run_scan=False)
                 snap = json.loads(path.read_text())
                 (DASHBOARD_DIR / "data").mkdir(parents=True, exist_ok=True)
                 (DASHBOARD_DIR / "data" / "snapshot.json").write_text(
@@ -98,12 +114,9 @@ class DeskHandler(SimpleHTTPRequestHandler):
                 )
                 self._json(200, snap)
                 return
-            if parsed.path == "/api/zerodha":
-                self._json(200, fetch_live_snapshot().to_dict())
-                return
             if parsed.path == "/api/analyze" and post:
-                limit = int(qs.get("limit", ["80"])[0])
-                feed = run_analysis_pass(limit=limit)
+                limit = int(qs.get("limit", ["60"])[0])
+                feed = run_analysis_pass(limit=limit, enrich_top=10)
                 snap = build_snapshot(run_scan=False)
                 (DASHBOARD_DIR / "data").mkdir(parents=True, exist_ok=True)
                 (DASHBOARD_DIR / "data" / "snapshot.json").write_text(
@@ -116,15 +129,43 @@ class DeskHandler(SimpleHTTPRequestHandler):
                 if feed_path.exists():
                     self._json(200, json.loads(feed_path.read_text()))
                     return
-                snap = build_snapshot(run_scan=True, limit_scan=60)
-                self._json(
-                    200,
-                    {
-                        "opportunities": snap.get("opportunities", []),
-                        "actionable": snap.get("actionable", []),
-                        "generated_at": snap.get("generated_at"),
-                    },
+                self._json(200, {"opportunities": list_suggestions(limit=50)})
+                return
+            if parsed.path == "/api/history":
+                self._json(200, {"suggestions": list_suggestions(include_expired=True, limit=100)})
+                return
+            if parsed.path == "/api/performance":
+                self._json(200, performance_stats())
+                return
+            if parsed.path == "/api/journal" and not post:
+                self._json(200, {"journal": list_journal(limit=100), "performance": performance_stats()})
+                return
+            if parsed.path == "/api/journal/open" and post:
+                body = self._body()
+                out = journal_open(
+                    stock=str(body.get("stock") or ""),
+                    qty=float(body.get("qty") or 1),
+                    entry_price=float(body.get("entry_price") or 0),
+                    stop=float(body["stop"]) if body.get("stop") is not None else None,
+                    target=float(body["target"]) if body.get("target") is not None else None,
+                    suggestion_id=body.get("suggestion_id"),
+                    notes=str(body.get("notes") or ""),
                 )
+                self._json(200, {"ok": True, "entry": out, "performance": performance_stats()})
+                return
+            if parsed.path == "/api/journal/update-entry" and post:
+                body = self._body()
+                journal_update_entry(str(body.get("id")), float(body.get("entry_price")))
+                self._json(200, {"ok": True, "journal": list_journal()})
+                return
+            if parsed.path == "/api/journal/close" and post:
+                body = self._body()
+                out = journal_close(
+                    str(body.get("id")),
+                    float(body.get("exit_price")),
+                    notes=str(body.get("notes") or ""),
+                )
+                self._json(200, {"ok": True, "closed": out, "performance": performance_stats()})
                 return
             self._json(404, {"error": f"unknown api {parsed.path}"})
         except Exception as exc:  # noqa: BLE001
@@ -135,7 +176,6 @@ def serve(host: str = "127.0.0.1", port: int = 8787) -> None:
     ensure_dirs()
     DASHBOARD_DIR.mkdir(parents=True, exist_ok=True)
     (DASHBOARD_DIR / "data").mkdir(parents=True, exist_ok=True)
-    # Seed static snapshot if missing
     snap_path = DASHBOARD_DIR / "data" / "snapshot.json"
     if not snap_path.exists():
         write_snapshot(snap_path, run_scan=False)

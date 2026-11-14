@@ -171,12 +171,20 @@ Dual-mom promotion unchanged (still production).
 | Intraday | Hourly refresh during NSE hours; kite quotes for open P&L |
 | Robustness | Only promote sleeves that clear walk-forward; demote negative OOS families |
 
-## 2026-11-14 — Phase 9 (Zerodha + continuous graded opportunities)
+## 2026-11-14 — Phase 9 (graded opportunities)
 
-- Zerodha adapter + desk panel for live avg buy / LTP / P&L / day P&L
-- Continuous analysis feed: every opportunity carries **buy, sell (T1), stop, RR, T2/T3, grade**
+- Continuous analysis feed: **buy, sell, stop, RR, T2/T3, grade**
 - Quality overlay uses promoted OOS evidence
-- Commands: `zerodha-status`, `analyze`, `watch`
+- Commands: `analyze`, `watch`, `journal`
+
+## 2026-11-14 — Phase 10 (news, zones, journal, history)
+
+- Live Yahoo news sentiment gates BUY → WAIT on bearish headlines
+- Weekly→daily supply/demand zones refine entry/exit/SL **ranges**
+- Single **why chosen** column on every suggestion
+- Suggestion history kept with **expiry**; target/SL hits auto-marked
+- Manual journal (mark/update entry + close for P&L) — open Kite web yourself, no API
+- Desk performance strip: live / successful / failed / win rate
 
 ## 2026-11-13 — Phase 8 (ATI Desk web dashboard + live paper host)
 

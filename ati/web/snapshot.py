@@ -7,11 +7,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ati.brokers.zerodha import fetch_live_snapshot
 from ati.config import REPORTS_DIR, ensure_dirs
 from ati.data.provider import MarketDataProvider
 from ati.data.universe import load_universe
 from ati.engine.suggestion_quality import annotate_opportunity, enrich_opportunity_dict
+from ati.journal.store import (
+    evaluate_hits_against_prices,
+    list_journal,
+    list_suggestions,
+    performance_stats,
+)
 from ati.models.opportunity import Opportunity
 from ati.ops.session import _default_broker, is_market_open
 from ati.regime.detector import RegimeDetector
@@ -147,7 +152,15 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
     if not positions:
         mtm_equity = float(acct["equity"])
 
-    zerodha = fetch_live_snapshot().to_dict()
+    # Manual journal + suggestion history (no Zerodha API)
+    prices = {p["symbol"]: p["last"] for p in positions}
+    for o in opportunities:
+        if o.get("stock") and o.get("current"):
+            prices[o["stock"]] = float(o["current"])
+    hits = evaluate_hits_against_prices(prices)
+    history = list_suggestions(include_expired=True, limit=40)
+    journal = list_journal(limit=40)
+    perf = performance_stats()
 
     production = registry.list_production()
     experiments = []
@@ -196,9 +209,17 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
             "mtm_return": round(mtm_equity / 100_000.0 - 1.0, 4),
         },
         "positions": positions,
-        "zerodha": zerodha,
+        "broker": {
+            "mode": "manual_journal",
+            "kite_web": "https://kite.zerodha.com",
+            "message": "Log into Kite in your browser, then mark entries/exits here for P&L (no API).",
+        },
         "opportunities": opportunities,
         "actionable": actionable,
+        "suggestion_history": history,
+        "journal": journal,
+        "performance": perf,
+        "hits_marked": hits,
         "scan": scan_meta,
         "production": production,
         "metrics": experiments,
@@ -209,17 +230,10 @@ def build_snapshot(*, run_scan: bool = True, limit_scan: int = 80) -> dict[str, 
             "adaptive_oos_stability": 0.48,
             "promoted": ["dual_momentum_nifty_gated", "regime_adaptive_multi"],
             "note": (
-                "Suggestions graded A/B/C using OOS family evidence + RR≥2. "
-                "Zerodha live P&L when KITE_* secrets are bound."
+                "Suggestions use news sentiment + HTF/LTF supply-demand + OOS grades. "
+                "Each call has buy/sell/SL ranges, why-chosen, and expiry."
             ),
         },
-        "efficiency_roadmap": [
-            "Bind Zerodha KITE_API_KEY + KITE_ACCESS_TOKEN for live broker P&L",
-            "Run `ati.cli watch` for continuous opportunity refresh",
-            "Prefer grade A/B BUY only — demote families with negative OOS",
-            "Expand universe via universe_extra.csv after liquidity filters",
-            "Add intraday confirmation cadence during NSE hours",
-        ],
     }
 
 
