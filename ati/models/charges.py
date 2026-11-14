@@ -16,6 +16,8 @@ class Segment(str, Enum):
     EQUITY_DELIVERY = "equity_delivery"
     EQUITY_INTRADAY = "equity_intraday"
     FUTURES = "futures"
+    EQUITY_OPTIONS = "equity_options"
+    MUTUAL_FUND = "mutual_fund"
 
 
 class Side(str, Enum):
@@ -25,10 +27,9 @@ class Side(str, Enum):
 
 @dataclass(frozen=True)
 class ChargeBreakdown:
-    """Itemized statutory + brokerage fees for one executed fill.
+    """Itemized statutory + brokerage fees for one fill (incremental within an order).
 
-    Slippage is intentionally excluded — apply it on price separately so fees
-    and slippage are never double-counted.
+    Slippage is intentionally excluded — apply it on price separately.
     """
 
     broker: str
@@ -48,7 +49,12 @@ class ChargeBreakdown:
     ipft: float
     gst: float
     dp: float
+    other: float
     total_fees: float
+    order_id: str | None = None
+    isin: str | None = None
+    trade_date: str | None = None
+    brokerage_order_total: float = 0.0
     source_urls: tuple[str, ...] = field(default_factory=tuple)
     notes: str = ""
 
@@ -91,6 +97,9 @@ class RoundTripEconomics:
     gross_pnl: float
     total_fees: float
     total_slippage: float
+    brokerage: float
+    statutory: float
+    dp: float
     net_pnl: float
     qty_bought: float
     qty_sold: float
@@ -102,6 +111,9 @@ class RoundTripEconomics:
             "gross_pnl": self.gross_pnl,
             "total_fees": self.total_fees,
             "total_slippage": self.total_slippage,
+            "brokerage": self.brokerage,
+            "statutory": self.statutory,
+            "dp": self.dp,
             "net_pnl": self.net_pnl,
             "qty_bought": self.qty_bought,
             "qty_sold": self.qty_sold,

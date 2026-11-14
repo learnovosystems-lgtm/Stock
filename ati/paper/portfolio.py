@@ -50,6 +50,7 @@ class PaperBroker:
         self.db_path = db_path or (STATE_DIR / "paper.db")
         self.risk_cfg = risk or DEFAULT.risk
         self.charges = charges or default_charge_engine(slippage_pct=self.risk_cfg.slippage_pct)
+        self.charge_session = self.charges.new_session()
         self.risk = RiskEngine(self.risk_cfg, charges=self.charges)
         self.segment = Segment(segment or DEFAULT.default_segment)
         self.allowed_strategy_substrings = (
@@ -232,17 +233,21 @@ class PaperBroker:
         if not sizing.allowed:
             return False, sizing.reason
         qty = min(sizing.quantity, opp.position_quantity)
+        now = datetime.now(timezone.utc).isoformat()
         eco = self.charges.economics_for_fill(
             side=Side.BUY,
             qty=qty,
             raw_price=opp.ideal_entry,
             segment=self.segment,
+            session=self.charge_session,
+            order_id=f"paper-buy-{opp.stock}-{now}",
+            symbol=opp.stock,
+            trade_date=now,
         )
         cash_needed = -eco.cash_delta
         acct = self.account()
         if cash_needed > acct["cash"]:
             return False, "Insufficient cash"
-        now = datetime.now(timezone.utc).isoformat()
         with self._conn() as cx:
             cx.execute(
                 "UPDATE account SET cash=?, updated_at=? WHERE id=1",
@@ -362,19 +367,24 @@ class PaperBroker:
             qty = p.qty * action.fraction
             if qty <= 0:
                 continue
-            # DP once per delivery sell order (each partial exit is a separate executed order)
+            # Each manage_exits slice is its own executed sell order; DP once/ISIN/day via session
+            now = datetime.now(timezone.utc).isoformat()
             eco = self.charges.economics_for_fill(
                 side=Side.SELL,
                 qty=qty,
                 raw_price=action.price,
                 segment=self.segment,
-                apply_dp=(self.segment == Segment.EQUITY_DELIVERY),
+                session=self.charge_session,
+                order_id=f"paper-sell-{p.symbol}-{action.reason.value}-{now}",
+                symbol=p.symbol,
+                trade_date=now,
             )
             gross = (eco.exec_price - p.entry) * qty
-            entry_fee_alloc = p.entry_fees * (qty / max(p.qty, 1e-9))
+            # Allocate remaining entry fees by remaining fraction closed this fill
+            frac_of_open = action.fraction / max(p.remaining_frac, 1e-9)
+            entry_fee_alloc = p.entry_fees * min(1.0, frac_of_open)
             net = gross - eco.total_fees - entry_fee_alloc
             acct = self.account()
-            now = datetime.now(timezone.utc).isoformat()
             new_frac = max(0.0, p.remaining_frac - action.fraction)
             with self._conn() as cx:
                 cx.execute(

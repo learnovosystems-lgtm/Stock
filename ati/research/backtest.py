@@ -49,9 +49,25 @@ def _stability(trade_returns: np.ndarray) -> float:
     return float(np.clip(base * (1.1 if same_sign else 0.7), 0, 1))
 
 
-def _bt_buy(engine: RiskEngine, cash: float, raw_price: float, qty: int) -> tuple[float, dict | None]:
+def _bt_buy(
+    engine: RiskEngine,
+    cash: float,
+    raw_price: float,
+    qty: int,
+    *,
+    symbol: str,
+    trade_date,
+    session,
+) -> tuple[float, dict | None]:
     eco = engine.charges.economics_for_fill(
-        side=Side.BUY, qty=qty, raw_price=raw_price, segment=Segment.EQUITY_DELIVERY
+        side=Side.BUY,
+        qty=qty,
+        raw_price=raw_price,
+        segment=Segment.EQUITY_DELIVERY,
+        session=session,
+        order_id=f"bt-buy-{symbol}-{trade_date}",
+        symbol=symbol,
+        trade_date=trade_date,
     )
     if -eco.cash_delta > cash:
         return cash, None
@@ -63,13 +79,26 @@ def _bt_buy(engine: RiskEngine, cash: float, raw_price: float, qty: int) -> tupl
     }
 
 
-def _bt_sell(engine: RiskEngine, cash: float, pos: dict, raw_exit: float, reason: str, symbol: str) -> tuple[float, dict]:
+def _bt_sell(
+    engine: RiskEngine,
+    cash: float,
+    pos: dict,
+    raw_exit: float,
+    reason: str,
+    symbol: str,
+    *,
+    trade_date,
+    session,
+) -> tuple[float, dict]:
     eco = engine.charges.economics_for_fill(
         side=Side.SELL,
         qty=pos["qty"],
         raw_price=raw_exit,
         segment=Segment.EQUITY_DELIVERY,
-        apply_dp=True,
+        session=session,
+        order_id=f"bt-sell-{symbol}-{reason}-{trade_date}",
+        symbol=symbol,
+        trade_date=trade_date,
     )
     gross = (eco.exec_price - pos["entry"]) * pos["qty"]
     fees = eco.total_fees + float(pos.get("entry_fees") or 0.0)
@@ -100,6 +129,7 @@ def run_breakout_momentum_baseline(
     """
     risk = risk or DEFAULT.risk
     engine = RiskEngine(risk)
+    session = engine.charges.new_session()
     cash = initial_capital
     equity = initial_capital
     open_pos: dict[str, dict] = {}
@@ -121,15 +151,21 @@ def run_breakout_momentum_baseline(
             pos["bars"] += 1
             # stop / target
             if bar["Low"] <= pos["stop"]:
-                cash, trade = _bt_sell(engine, cash, pos, float(pos["stop"]), "stop", sym)
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(pos["stop"]), "stop", sym, trade_date=dt, session=session
+                )
                 trades.append(trade)
                 to_close.append(sym)
             elif bar["High"] >= pos["target"]:
-                cash, trade = _bt_sell(engine, cash, pos, float(pos["target"]), "target", sym)
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(pos["target"]), "target", sym, trade_date=dt, session=session
+                )
                 trades.append(trade)
                 to_close.append(sym)
             elif pos["bars"] >= 20:
-                cash, trade = _bt_sell(engine, cash, pos, float(bar["Close"]), "time", sym)
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(bar["Close"]), "time", sym, trade_date=dt, session=session
+                )
                 trades.append(trade)
                 to_close.append(sym)
         for sym in to_close:
@@ -175,7 +211,9 @@ def run_breakout_momentum_baseline(
                 if qty < 1:
                     continue
                 target = entry_est + 2.5 * (entry_est - stop)
-                cash, pos = _bt_buy(engine, cash, raw, qty)
+                cash, pos = _bt_buy(
+                    engine, cash, raw, qty, symbol=sym, trade_date=dt, session=session
+                )
                 if pos is None:
                     continue
                 pos["stop"] = stop
@@ -200,7 +238,9 @@ def run_breakout_momentum_baseline(
         for sym, pos in list(open_pos.items()):
             df = enriched.get(sym)
             raw = float(df.loc[last_dt, "Close"]) if df is not None and last_dt in df.index else pos["entry"]
-            cash, trade = _bt_sell(engine, cash, pos, raw, "eod_flatten", sym)
+            cash, trade = _bt_sell(
+                engine, cash, pos, raw, "eod_flatten", sym, trade_date=last_dt, session=session
+            )
             trades.append(trade)
 
     trade_log = pd.DataFrame(trades)
@@ -260,6 +300,7 @@ def run_pullback_trend_baseline(
     """Alternative baseline: buy pullbacks to rising SMA20 in SMA50>SMA200 trends."""
     risk = risk or DEFAULT.risk
     engine = RiskEngine(risk)
+    session = engine.charges.new_session()
     cash = initial_capital
     equity = initial_capital
     open_pos: dict[str, dict] = {}
@@ -277,15 +318,21 @@ def run_pullback_trend_baseline(
             bar = df.loc[dt]
             pos["bars"] += 1
             if bar["Low"] <= pos["stop"]:
-                cash, trade = _bt_sell(engine, cash, pos, float(pos["stop"]), "stop", sym)
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(pos["stop"]), "stop", sym, trade_date=dt, session=session
+                )
                 trades.append(trade)
                 to_close.append(sym)
             elif bar["High"] >= pos["target"]:
-                cash, trade = _bt_sell(engine, cash, pos, float(pos["target"]), "target", sym)
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(pos["target"]), "target", sym, trade_date=dt, session=session
+                )
                 trades.append(trade)
                 to_close.append(sym)
             elif pos["bars"] >= 25:
-                cash, trade = _bt_sell(engine, cash, pos, float(bar["Close"]), "time", sym)
+                cash, trade = _bt_sell(
+                    engine, cash, pos, float(bar["Close"]), "time", sym, trade_date=dt, session=session
+                )
                 trades.append(trade)
                 to_close.append(sym)
         for sym in to_close:
@@ -317,7 +364,9 @@ def run_pullback_trend_baseline(
                 if qty < 1:
                     continue
                 target = entry_est + 2.5 * (entry_est - stop)
-                cash, pos = _bt_buy(engine, cash, raw, qty)
+                cash, pos = _bt_buy(
+                    engine, cash, raw, qty, symbol=sym, trade_date=dt, session=session
+                )
                 if pos is None:
                     continue
                 pos["stop"] = stop

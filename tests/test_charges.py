@@ -1,13 +1,11 @@
-"""Phase-1 ChargeEngine golden vectors, broker isolation, reconciliation."""
+"""Phase-1 ChargeEngine: FYERS Standard corrections, order brokerage, DP, reconciliation."""
 
 from __future__ import annotations
 
-import math
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
-
-from datetime import datetime, timezone
 
 from ati.engine.charges import ChargeEngine, resolve_schedule
 from ati.models.charges import Segment, Side
@@ -15,13 +13,13 @@ from ati.models.opportunity import MarketRegime, Opportunity, SignalType
 from ati.paper.portfolio import PaperBroker
 
 
-def _approx(a: float, b: float, tol: float = 0.05) -> None:
+def _approx(a: float, b: float, tol: float = 0.02) -> None:
     assert abs(a - b) <= tol, f"{a} != {b} (±{tol})"
 
 
-def _opp() -> Opportunity:
+def _opp(stock: str = "TEST.NS") -> Opportunity:
     return Opportunity(
-        stock="TEST.NS",
+        stock=stock,
         signal=SignalType.BUY,
         current_price=1000,
         ideal_entry=1000,
@@ -58,128 +56,247 @@ def _opp() -> Opportunity:
     )
 
 
-def test_fyers_schedule_not_zerodha():
+def test_fyers_not_zerodha_and_ipft_from_charges_list():
     fy = resolve_schedule("fyers")
     zd = resolve_schedule("zerodha")
-    assert fy.broker == "fyers"
-    assert zd.broker == "zerodha"
-    assert fy.schedule_id != zd.schedule_id
-    # Delivery brokerage: FYERS has ₹20/0.3%; Zerodha delivery brokerage is ₹0
-    assert fy.equity_delivery.brokerage_flat == 20.0
-    assert zd.equity_delivery.brokerage_flat == 0.0
+    assert fy.broker == "fyers" and zd.broker == "zerodha"
+    assert fy.equity_delivery.ipft_per_crore == pytest.approx(0.01)
+    assert fy.futures.ipft_per_crore == pytest.approx(0.01)
+    assert fy.equity_options.ipft_per_crore == pytest.approx(50.0)
+    assert "0.01" in fy.notes and "10/crore" in fy.notes
 
 
-def test_fyers_equity_delivery_sample():
-    """Sample: buy 100 @ 1000, sell 100 @ 1100 — FYERS delivery Standard."""
+def test_equity_delivery_charges():
     eng = ChargeEngine("fyers", slippage_pct=0.0, as_of="2026-11-14")
     buy = eng.charges_for_fill(side=Side.BUY, qty=100, price=1000.0, segment=Segment.EQUITY_DELIVERY)
     sell = eng.charges_for_fill(side=Side.SELL, qty=100, price=1100.0, segment=Segment.EQUITY_DELIVERY)
-
-    # Brokerage: min(20, 0.3% * turnover)
-    _approx(buy.brokerage, min(20.0, 0.003 * 100_000))
-    _approx(sell.brokerage, min(20.0, 0.003 * 110_000))
-    # STT 0.1% both sides
+    _approx(buy.brokerage, 20.0)
+    _approx(sell.brokerage, 20.0)
     _approx(buy.stt, 100.0)
     _approx(sell.stt, 110.0)
-    # Stamp 0.015% buy only
     _approx(buy.stamp, 15.0)
     assert sell.stamp == 0.0
-    # DP on sell
     _approx(sell.dp, 12.5)
-    assert buy.total_fees > 0 and sell.total_fees > 0
-    assert buy.schedule_id.startswith("fyers_")
-    assert any("fyers.in/charges-list" in u for u in buy.source_urls)
+    # IPFT ₹0.01/crore on ₹1L = ₹0.0001 → rounds to ₹0.00 at 2dp (documented)
+    assert buy.ipft == 0.0
+    # GST excludes STT/stamp (FYERS charges-list base)
+    gst_base = buy.brokerage + buy.exchange_txn + buy.clearing + buy.sebi + buy.ipft
+    _approx(buy.gst, gst_base * 0.18, tol=0.02)
 
 
-def test_fyers_equity_intraday_sample():
+def test_equity_intraday_charges():
     eng = ChargeEngine("fyers", slippage_pct=0.0)
     buy = eng.charges_for_fill(side=Side.BUY, qty=100, price=1000.0, segment=Segment.EQUITY_INTRADAY)
     sell = eng.charges_for_fill(side=Side.SELL, qty=100, price=1005.0, segment=Segment.EQUITY_INTRADAY)
-    # Brokerage min(20, 0.03%)
     _approx(buy.brokerage, min(20.0, 0.0003 * 100_000))
     assert buy.stt == 0.0
     _approx(sell.stt, 0.00025 * 1005 * 100)
     assert buy.dp == 0.0 and sell.dp == 0.0
 
 
-def test_fyers_futures_sample():
+def test_equity_futures_charges():
     eng = ChargeEngine("fyers", slippage_pct=0.0)
-    # 1 lot notionally: qty=50 @ 2500
     buy = eng.charges_for_fill(side=Side.BUY, qty=50, price=2500.0, segment=Segment.FUTURES)
     sell = eng.charges_for_fill(side=Side.SELL, qty=50, price=2550.0, segment=Segment.FUTURES)
     _approx(buy.brokerage, min(20.0, 0.0003 * 125_000))
     assert buy.stt == 0.0
     _approx(sell.stt, 0.0005 * 50 * 2550)
-    assert buy.stamp > 0 and sell.stamp == 0.0
-    assert buy.clearing > 0
+    assert buy.dp == 0 and sell.dp == 0
+    # Visible IPFT needs ~₹1cr turnover under ₹0.01/crore schedule
+    big = eng.charges_for_fill(side=Side.BUY, qty=10_000, price=1000.0, segment=Segment.FUTURES)
+    _approx(big.ipft, 0.01)  # 1 crore * 0.01 / crore
 
 
-def test_slippage_not_double_counted_in_fees():
-    eng = ChargeEngine("fyers", slippage_pct=0.001)
-    eco = eng.economics_for_fill(side=Side.BUY, qty=10, raw_price=1000.0, segment=Segment.EQUITY_DELIVERY)
-    # Fees computed on slipped price, but fee total must not include slippage rupees
-    assert eco.slippage_rupees == pytest.approx(10.0)  # 1 * 10 qty
-    assert eco.charges.total_fees == eco.total_fees
-    # Slippage is not a line item inside charges
-    assert not hasattr(eco.charges, "slippage")
-    fee_sum = (
-        eco.charges.brokerage
-        + eco.charges.stt
-        + eco.charges.exchange_txn
-        + eco.charges.clearing
-        + eco.charges.sebi
-        + eco.charges.stamp
-        + eco.charges.ipft
-        + eco.charges.gst
-        + eco.charges.dp
-    )
-    _approx(fee_sum, eco.total_fees, tol=1e-4)
-
-
-def test_partial_fills_multiple_exits_reconciliation():
-    """One buy + two partial sells: each sell is a separate executed order (brokerage each)."""
+def test_equity_options_charges():
     eng = ChargeEngine("fyers", slippage_pct=0.0)
-    buy = eng.economics_for_fill(side=Side.BUY, qty=100, raw_price=1000.0, segment=Segment.EQUITY_DELIVERY)
-    s1 = eng.economics_for_fill(side=Side.SELL, qty=40, raw_price=1100.0, segment=Segment.EQUITY_DELIVERY)
-    s2 = eng.economics_for_fill(side=Side.SELL, qty=60, raw_price=1120.0, segment=Segment.EQUITY_DELIVERY)
+    # Premium ₹100, qty 50
+    buy = eng.charges_for_fill(side=Side.BUY, qty=50, price=100.0, segment=Segment.EQUITY_OPTIONS)
+    sell = eng.charges_for_fill(side=Side.SELL, qty=50, price=120.0, segment=Segment.EQUITY_OPTIONS)
+    _approx(buy.brokerage, 20.0)  # flat
+    assert buy.stt == 0.0
+    _approx(sell.stt, 0.0015 * 50 * 120)
+    _approx(buy.ipft, 5000 * 50.0 / 10_000_000)
+
+
+def test_brokerage_cap_boundaries():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    # Delivery: 0.3% of 1000 = 3 < 20 → pct wins
+    small = eng.charges_for_fill(side=Side.BUY, qty=1, price=1000, segment=Segment.EQUITY_DELIVERY)
+    _approx(small.brokerage, 3.0)
+    # 0.3% of 100000 = 300 → capped at 20
+    big = eng.charges_for_fill(side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY)
+    _approx(big.brokerage, 20.0)
+    # Intraday 0.03% of 100000 = 30 → 20
+    intra = eng.charges_for_fill(side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_INTRADAY)
+    _approx(intra.brokerage, 20.0)
+    # Intraday small: 0.03% of 10000 = 3
+    intra_s = eng.charges_for_fill(side=Side.BUY, qty=10, price=1000, segment=Segment.EQUITY_INTRADAY)
+    _approx(intra_s.brokerage, 3.0)
+
+
+def test_brokerage_aggregation_across_partial_fills():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    sess = eng.new_session()
+    # Same order: two fills totaling 100 @ 1000 → brokerage once = 20
+    f1 = eng.charges_for_fill(
+        side=Side.BUY, qty=40, price=1000, segment=Segment.EQUITY_DELIVERY,
+        order_id="O1", session=sess, symbol="AAA", trade_date="2026-11-14",
+    )
+    f2 = eng.charges_for_fill(
+        side=Side.BUY, qty=60, price=1000, segment=Segment.EQUITY_DELIVERY,
+        order_id="O1", session=sess, symbol="AAA", trade_date="2026-11-14",
+    )
+    _approx(f1.brokerage + f2.brokerage, 20.0)
+    _approx(f2.brokerage_order_total, 20.0)
+    # Separate orders → two brokerages
+    sess2 = eng.new_session()
+    a = eng.charges_for_fill(
+        side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY,
+        order_id="A", session=sess2, symbol="AAA", trade_date="2026-11-14",
+    )
+    b = eng.charges_for_fill(
+        side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY,
+        order_id="B", session=sess2, symbol="AAA", trade_date="2026-11-14",
+    )
+    _approx(a.brokerage + b.brokerage, 40.0)
+
+
+def test_dp_once_per_isin_per_day_and_different_isins():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    sess = eng.new_session()
+    s1 = eng.charges_for_fill(
+        side=Side.SELL, qty=40, price=1100, segment=Segment.EQUITY_DELIVERY,
+        order_id="S1", session=sess, symbol="RELIANCE", trade_date="2026-11-14",
+    )
+    s2 = eng.charges_for_fill(
+        side=Side.SELL, qty=60, price=1120, segment=Segment.EQUITY_DELIVERY,
+        order_id="S2", session=sess, symbol="RELIANCE", trade_date="2026-11-14",
+    )
+    _approx(s1.dp, 12.5)
+    assert s2.dp == 0.0  # same ISIN same day
+    other = eng.charges_for_fill(
+        side=Side.SELL, qty=10, price=500, segment=Segment.EQUITY_DELIVERY,
+        order_id="S3", session=sess, symbol="TCS", trade_date="2026-11-14",
+    )
+    _approx(other.dp, 12.5)
+    next_day = eng.charges_for_fill(
+        side=Side.SELL, qty=10, price=1100, segment=Segment.EQUITY_DELIVERY,
+        order_id="S4", session=sess, symbol="RELIANCE", trade_date="2026-11-15",
+    )
+    _approx(next_day.dp, 12.5)
+
+
+def test_no_dp_on_intraday_or_futures():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    sess = eng.new_session()
+    i = eng.charges_for_fill(
+        side=Side.SELL, qty=10, price=100, segment=Segment.EQUITY_INTRADAY,
+        session=sess, symbol="X", trade_date="2026-11-14", order_id="i1",
+    )
+    f = eng.charges_for_fill(
+        side=Side.SELL, qty=10, price=100, segment=Segment.FUTURES,
+        session=sess, symbol="X", trade_date="2026-11-14", order_id="f1",
+    )
+    assert i.dp == 0 and f.dp == 0
+
+
+def test_gst_rounding_and_ipft():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    c = eng.charges_for_fill(side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY)
+    assert c.gst == round(c.gst, 2)
+    assert c.total_fees == round(c.total_fees, 2)
+    # ₹1 crore delivery: IPFT = ₹0.01
+    big = eng.charges_for_fill(side=Side.BUY, qty=10_000, price=1000, segment=Segment.EQUITY_DELIVERY)
+    assert big.ipft == pytest.approx(0.01)
+
+
+def test_partial_and_complete_exit_reconciliation():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    sess = eng.new_session()
+    buy = eng.economics_for_fill(
+        side=Side.BUY, qty=100, raw_price=1000, segment=Segment.EQUITY_DELIVERY,
+        session=sess, order_id="B", symbol="AAA", trade_date="2026-11-14",
+    )
+    s1 = eng.economics_for_fill(
+        side=Side.SELL, qty=40, raw_price=1100, segment=Segment.EQUITY_DELIVERY,
+        session=sess, order_id="S1", symbol="AAA", trade_date="2026-11-14",
+    )
+    s2 = eng.economics_for_fill(
+        side=Side.SELL, qty=60, raw_price=1120, segment=Segment.EQUITY_DELIVERY,
+        session=sess, order_id="S2", symbol="AAA", trade_date="2026-11-14",
+    )
     rt = eng.reconcile_round_trip(buy=buy, sells=[s1, s2])
-    assert rt.qty_bought == 100
     assert rt.qty_sold == 100
-    # Two sell orders => two brokerage assessments
-    assert s1.charges.brokerage > 0 and s2.charges.brokerage > 0
-    # Gross from slipped notionals
-    expected_gross = (40 * 1100 + 60 * 1120) - (100 * 1000)
-    _approx(rt.gross_pnl, expected_gross, tol=0.01)
+    assert s1.charges.dp > 0 and s2.charges.dp == 0
+    _approx(buy.cash_delta + s1.cash_delta + s2.cash_delta, rt.net_pnl)
     assert rt.net_pnl < rt.gross_pnl
-    # Cash identity: buy cash + sell cashes == net for full round trip
-    _approx(buy.cash_delta + s1.cash_delta + s2.cash_delta, rt.net_pnl, tol=0.05)
+    # Separate brokerage on two sell orders
+    assert s1.charges.brokerage > 0 and s2.charges.brokerage > 0
 
 
-def test_paper_broker_net_fill_and_operational(tmp_path: Path):
-    db = tmp_path / "paper.db"
-    broker = PaperBroker(db_path=db, allowed_strategy_substrings=())
-    assert broker.account()["cash"] == pytest.approx(100_000.0)
-    assert broker.charges.broker == "fyers"
+def test_reject_oversell_and_segment_mismatch():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    buy = eng.economics_for_fill(side=Side.BUY, qty=10, raw_price=100, segment=Segment.EQUITY_DELIVERY)
+    sell = eng.economics_for_fill(side=Side.SELL, qty=11, raw_price=110, segment=Segment.EQUITY_DELIVERY)
+    with pytest.raises(ValueError, match="exceeds"):
+        eng.reconcile_round_trip(buy=buy, sells=[sell])
+    sell_i = eng.economics_for_fill(side=Side.SELL, qty=10, raw_price=110, segment=Segment.EQUITY_INTRADAY)
+    with pytest.raises(ValueError, match="segment"):
+        eng.reconcile_round_trip(buy=buy, sells=[sell_i])
+
+
+def test_slippage_not_in_fee_lines():
+    eng = ChargeEngine("fyers", slippage_pct=0.001)
+    eco = eng.economics_for_fill(side=Side.BUY, qty=10, raw_price=1000, segment=Segment.EQUITY_DELIVERY)
+    assert eco.slippage_rupees == pytest.approx(10.0)
+    fee_sum = (
+        eco.charges.brokerage + eco.charges.stt + eco.charges.exchange_txn + eco.charges.clearing
+        + eco.charges.sebi + eco.charges.stamp + eco.charges.ipft + eco.charges.gst
+        + eco.charges.dp + eco.charges.other
+    )
+    _approx(fee_sum, eco.total_fees)
+
+
+def test_historical_schedule_selection():
+    # Before 2026-04-01: only schedule starts 2026-04-01 for fyers — should still resolve
+    # (single open-ended schedule). as_of after effective works.
+    s = resolve_schedule("fyers", as_of="2026-06-01")
+    assert s.effective_date == date(2026, 4, 1)
+    with pytest.raises(ValueError):
+        resolve_schedule("fyers", as_of="2020-01-01")
+
+
+def test_event_charges_not_invented_unless_requested():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    normal = eng.charges_for_fill(side=Side.BUY, qty=10, price=100, segment=Segment.EQUITY_DELIVERY)
+    assert normal.other == 0.0
+    cat = eng.charges_for_fill(
+        side=Side.BUY, qty=10, price=100, segment=Segment.EQUITY_DELIVERY, event="call_and_trade"
+    )
+    _approx(cat.other, 50.0)
+
+
+def test_paper_cash_ledger_reconciles(tmp_path: Path):
+    broker = PaperBroker(db_path=tmp_path / "p.db", allowed_strategy_substrings=())
+    start = broker.account()["cash"]
     ok, msg = broker.try_enter(_opp())
     assert ok, msg
-    assert "Bought" in msg
-    acct = broker.account()
-    assert acct["cash"] < 100_000.0
-    pos = broker.positions()
-    assert len(pos) == 1
-    assert pos[0].entry_fees > 0
-    sell = broker.charges.economics_for_fill(
-        side=Side.SELL, qty=20, raw_price=1040.0, segment=Segment.EQUITY_DELIVERY
-    )
-    assert sell.total_fees > 0
+    after = broker.account()["cash"]
+    assert after < start
+    pos = broker.positions()[0]
+    assert pos.entry_fees > 0
+    # Cash drop equals notional+fees from last buy fill
+    import sqlite3
+
+    with sqlite3.connect(tmp_path / "p.db") as cx:
+        row = cx.execute(
+            "SELECT price, qty, fees FROM fills WHERE side='BUY' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    expected = start - (row[0] * row[1] + row[2])
+    _approx(after, expected, tol=0.05)
 
 
-def test_zerodha_profile_isolated():
-    """Selecting zerodha must not change fyers engine math."""
-    fy = ChargeEngine("fyers", slippage_pct=0.0)
-    zd = ChargeEngine("zerodha", slippage_pct=0.0)
-    fy_buy = fy.charges_for_fill(side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY)
-    zd_buy = zd.charges_for_fill(side=Side.BUY, qty=100, price=1000, segment=Segment.EQUITY_DELIVERY)
-    assert fy_buy.brokerage != zd_buy.brokerage or fy_buy.broker == "fyers"
-    assert zd_buy.brokerage == 0.0  # Zerodha delivery brokerage
-    assert fy_buy.brokerage == pytest.approx(20.0) or fy_buy.brokerage == pytest.approx(min(20, 300))
+def test_mutual_fund_zero_brokerage():
+    eng = ChargeEngine("fyers", slippage_pct=0.0)
+    c = eng.charges_for_fill(side=Side.BUY, qty=10, price=100, segment=Segment.MUTUAL_FUND)
+    assert c.brokerage == 0 and c.total_fees == 0

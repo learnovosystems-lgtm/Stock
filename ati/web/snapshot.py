@@ -37,17 +37,23 @@ def _mtm_positions(broker, provider: MarketDataProvider) -> list[dict[str, Any]]
         df = provider.get_daily(sym)
         last = float(df["Close"].iloc[-1]) if df is not None and len(df) else p.entry
         qty_open = p.qty * p.remaining_frac
-        gross = (last - p.entry) * qty_open
-        # Estimated net if exited now at last (slippage + sell fees + remaining entry fee alloc)
+        entry_fee_left = float(getattr(p, "entry_fees", 0.0) or 0.0)
+        # Estimated net if exited now: exit slippage + sell fees + remaining entry fees
+        session = getattr(broker, "charge_session", None) or charges.new_session()
         est_sell = charges.economics_for_fill(
             side=Side.SELL,
             qty=qty_open,
             raw_price=last,
             segment=segment,
-            apply_dp=(segment == Segment.EQUITY_DELIVERY),
+            apply_slippage=True,
+            session=session,
+            order_id=f"mtm-est-{p.symbol}",
+            symbol=p.symbol,
         )
-        entry_fee_left = float(getattr(p, "entry_fees", 0.0) or 0.0)
-        est_net = gross - est_sell.total_fees - entry_fee_left
+        gross_mark = (last - p.entry) * qty_open
+        # Gross at slipped exit vs entry (fees excluded)
+        gross_slipped = (est_sell.exec_price - p.entry) * qty_open
+        est_net = gross_slipped - est_sell.total_fees - entry_fee_left
         pnl_pct = last / p.entry - 1.0 if p.entry else 0.0
         out.append(
             {
@@ -62,9 +68,11 @@ def _mtm_positions(broker, provider: MarketDataProvider) -> list[dict[str, Any]]
                 "t2": round(p.t2, 2),
                 "t3": round(p.t3, 2),
                 "rr": round((p.t1 - p.entry) / max(p.entry - p.stop, 1e-9), 2),
-                "unrealized_pnl": round(gross, 2),
-                "unrealized_gross": round(gross, 2),
+                "unrealized_pnl": round(gross_mark, 2),
+                "unrealized_gross": round(gross_mark, 2),
+                "unrealized_gross_slipped": round(gross_slipped, 2),
                 "unrealized_fees_est": round(est_sell.total_fees + entry_fee_left, 2),
+                "unrealized_slippage_est": round(est_sell.slippage_rupees, 2),
                 "unrealized_net_est": round(est_net, 2),
                 "unrealized_pct": round(pnl_pct, 4),
                 "entry_fees": round(entry_fee_left, 2),

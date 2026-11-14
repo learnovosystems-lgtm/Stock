@@ -1,20 +1,29 @@
-"""Broker-configurable ChargeEngine — FYERS / Zerodha schedules, versioned by date.
+"""Broker-configurable ChargeEngine — FYERS Standard (default) / Zerodha profiles.
 
-Slippage is applied on price only. Statutory + brokerage fees are itemized and
-never folded into the slipped price, preventing double-counting.
+Rules (Phase-1 corrections):
+- Brokerage is assessed at the **executed-order** level (partial fills of the same
+  order_id share one brokerage = min(cap, pct × order turnover)).
+- IPFT for NSE equity/futures from FYERS charges-list: ₹0.01/crore (not ₹10/crore).
+  Discrepancy with FYERS statutory KB (₹10/crore) is documented; charges-list wins.
+- Equity options IPFT: ₹50/crore (subject to exchange circular verification).
+- DP ₹12.50+GST once per ISIN per trading day on delivery sells only.
+- Slippage is price-only — never folded into fee lines.
+- Optional event charges (call-and-trade, square-off, pledge, ledger interest)
+  exist as hooks; not applied unless explicitly requested.
 
-Official sources (pinned in schedule metadata):
-- FYERS charges list: https://fyers.in/charges-list
-- FYERS statutory KB: https://support.fyers.in/portal/en/kb/articles/what-are-the-statutory-charges-on-trades-at-fyers-stt-gst-sebi-turnover-fee-ipft-etc
-- FYERS pricing: https://fyers.in/pricing
-- Zerodha charges (legacy / alternate profile only): https://zerodha.com/charges
+Sources:
+- https://fyers.in/charges-list
+- https://fyers.in/pricing
+- https://support.fyers.in/portal/en/kb/articles/what-are-the-statutory-charges-on-trades-at-fyers-stt-gst-sebi-turnover-fee-ipft-etc
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Iterable, Sequence
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Sequence
+from zoneinfo import ZoneInfo
 
 from ati.models.charges import (
     BrokerId,
@@ -27,94 +36,142 @@ from ati.models.charges import (
 
 
 CRORE = 10_000_000.0
+IST = ZoneInfo("Asia/Kolkata")
+MONEY_QUANT = Decimal("0.01")
+
+
+def _money(x: float | Decimal) -> float:
+    return float(Decimal(str(x)).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP))
 
 
 @dataclass(frozen=True)
 class _SegmentRates:
-    # Brokerage: min(flat_cap, pct * turnover) when pct > 0; else flat
     brokerage_flat: float
-    brokerage_pct: float  # 0 => flat only
-    # STT as fraction of turnover; buy/sell flags
+    brokerage_pct: float  # 0 => flat-only (or zero)
     stt_pct: float
     stt_on_buy: bool
     stt_on_sell: bool
     exchange_txn_pct: float
     clearing_pct: float
     sebi_per_crore: float
-    stamp_pct_buy: float  # 0 on sell
+    stamp_pct_buy: float
     ipft_per_crore: float
     gst_rate: float
-    # DP on delivery sell (per scrip / day) — applied once per sell order when enabled
     dp_flat: float
     dp_gst: bool
+    # Turnover base for STT/exch: "notional" (qty*price) or "premium" (options)
+    turnover_basis: str = "notional"
 
 
 @dataclass(frozen=True)
 class FeeSchedule:
     broker: str
     schedule_id: str
-    effective_date: date  # inclusive
-    end_date: date | None  # exclusive; None = open
+    effective_date: date
+    end_date: date | None
     source_urls: tuple[str, ...]
     equity_delivery: _SegmentRates
     equity_intraday: _SegmentRates
     futures: _SegmentRates
+    equity_options: _SegmentRates
+    mutual_fund: _SegmentRates
+    # Optional event rates (applied only when event requested)
+    call_and_trade: float = 50.0
+    admin_square_off: float = 50.0
+    pledge_unpledge: float = 0.0
+    ledger_interest_daily_pct: float = 0.00041  # 0.041%/day FYERS
+    account_opening: float = 0.0
+    amc: float = 0.0
     notes: str = ""
 
 
 def _fyers_standard_2026_04_01() -> FeeSchedule:
-    """FYERS Standard plan rates from fyers.in/charges-list (captured 2026-11-14).
+    """FYERS Standard plan — effective 2026-04-01 (STT F&O revision date).
 
-    IPFT: charges-list shows ₹0.01/Crore; FYERS statutory KB (updated 01 Apr 2026)
-    documents ₹10/Crore with a worked example. We pin KB ₹10/Crore for IPFT and
-    record the discrepancy in notes.
+    IPFT: charges-list shows ₹0.01/Crore for equity delivery/intraday/futures.
+    FYERS statutory KB (01 Apr 2026) still shows ₹10/Crore with a worked example.
+    Per Phase-1 correction: pin charges-list ₹0.01/Crore and document the conflict.
+    Options IPFT: ₹50/Crore per charges-list (on premium).
     """
     gst = 0.18
     sebi = 10.0
-    ipft = 10.0  # per crore — see notes
+    ipft_eq = 0.01  # ₹ per crore — FYERS charges-list
+    ipft_opt = 50.0
     eq_exch = 0.0030699 / 100.0
     fut_exch = 0.0018299 / 100.0
+    opt_exch = 0.0355299 / 100.0  # on premium
     delivery = _SegmentRates(
         brokerage_flat=20.0,
-        brokerage_pct=0.003,  # 0.3%
-        stt_pct=0.001,  # 0.1%
+        brokerage_pct=0.003,
+        stt_pct=0.001,
         stt_on_buy=True,
         stt_on_sell=True,
         exchange_txn_pct=eq_exch,
-        clearing_pct=0.0,  # not separately listed for cash equity on charges-list
+        clearing_pct=0.0,
         sebi_per_crore=sebi,
-        stamp_pct_buy=0.00015,  # 0.015%
-        ipft_per_crore=ipft,
+        stamp_pct_buy=0.00015,
+        ipft_per_crore=ipft_eq,
         gst_rate=gst,
         dp_flat=12.5,
         dp_gst=True,
     )
     intraday = _SegmentRates(
         brokerage_flat=20.0,
-        brokerage_pct=0.0003,  # 0.03%
-        stt_pct=0.00025,  # 0.025% sell only
+        brokerage_pct=0.0003,
+        stt_pct=0.00025,
         stt_on_buy=False,
         stt_on_sell=True,
         exchange_txn_pct=eq_exch,
         clearing_pct=0.0,
         sebi_per_crore=sebi,
-        stamp_pct_buy=0.00003,  # 0.003%
-        ipft_per_crore=ipft,
+        stamp_pct_buy=0.00003,
+        ipft_per_crore=ipft_eq,
         gst_rate=gst,
         dp_flat=0.0,
         dp_gst=False,
     )
     futures = _SegmentRates(
         brokerage_flat=20.0,
-        brokerage_pct=0.0003,  # 0.03%
-        stt_pct=0.0005,  # 0.05% sell only
+        brokerage_pct=0.0003,
+        stt_pct=0.0005,  # 0.05% sell — revised 2026-04-01
         stt_on_buy=False,
         stt_on_sell=True,
         exchange_txn_pct=fut_exch,
-        clearing_pct=0.0005 / 100.0,  # 0.0005% from charges-list clearing row
+        clearing_pct=0.0005 / 100.0,
         sebi_per_crore=sebi,
-        stamp_pct_buy=0.00002,  # 0.002%
-        ipft_per_crore=ipft,
+        stamp_pct_buy=0.00002,
+        ipft_per_crore=ipft_eq,
+        gst_rate=gst,
+        dp_flat=0.0,
+        dp_gst=False,
+    )
+    options = _SegmentRates(
+        brokerage_flat=20.0,
+        brokerage_pct=0.0,  # flat ₹20
+        stt_pct=0.0015,  # 0.15% on premium, sell
+        stt_on_buy=False,
+        stt_on_sell=True,
+        exchange_txn_pct=opt_exch,
+        clearing_pct=0.009 / 100.0,
+        sebi_per_crore=sebi,
+        stamp_pct_buy=0.00003,
+        ipft_per_crore=ipft_opt,
+        gst_rate=gst,
+        dp_flat=0.0,
+        dp_gst=False,
+        turnover_basis="premium",
+    )
+    mf = _SegmentRates(
+        brokerage_flat=0.0,
+        brokerage_pct=0.0,
+        stt_pct=0.0,
+        stt_on_buy=False,
+        stt_on_sell=False,
+        exchange_txn_pct=0.0,
+        clearing_pct=0.0,
+        sebi_per_crore=0.0,
+        stamp_pct_buy=0.0,
+        ipft_per_crore=0.0,
         gst_rate=gst,
         dp_flat=0.0,
         dp_gst=False,
@@ -132,27 +189,27 @@ def _fyers_standard_2026_04_01() -> FeeSchedule:
         equity_delivery=delivery,
         equity_intraday=intraday,
         futures=futures,
+        equity_options=options,
+        mutual_fund=mf,
         notes=(
-            "FYERS Standard (₹20 or pct, whichever lower). "
-            "IPFT pinned at ₹10/crore per FYERS statutory KB example (01 Apr 2026); "
-            "charges-list UI shows ₹0.01/crore — discrepancy documented."
+            "FYERS Standard. Account opening/AMC ₹0. Prime not modeled. "
+            "IPFT equity/FUT = ₹0.01/crore from fyers.in/charges-list; "
+            "statutory KB still cites ₹10/crore — discrepancy documented, charges-list used. "
+            "Options IPFT ₹50/crore from charges-list (verify vs NSE circular). "
+            "F&O STT rates effective 2026-04-01."
         ),
     )
 
 
 def _zerodha_equity_2024_10_01() -> FeeSchedule:
-    """Zerodha alternate profile — never used when broker=fyers.
-
-    Approximate published equity/F&O discount schedule for configuration parity.
-    Source: https://zerodha.com/charges (captured for versioning; not applied to FYERS).
-    """
+    """Zerodha alternate profile — never selected when charges_broker=fyers."""
     gst = 0.18
     sebi = 10.0
     ipft = 10.0
     eq_exch = 0.00297 / 100.0
     fut_exch = 0.00173 / 100.0
     delivery = _SegmentRates(
-        brokerage_flat=0.0,  # Zerodha equity delivery brokerage ₹0
+        brokerage_flat=0.0,
         brokerage_pct=0.0,
         stt_pct=0.001,
         stt_on_buy=True,
@@ -163,7 +220,7 @@ def _zerodha_equity_2024_10_01() -> FeeSchedule:
         stamp_pct_buy=0.00015,
         ipft_per_crore=ipft,
         gst_rate=gst,
-        dp_flat=13.5,  # approx CDSL+broker; profile-specific
+        dp_flat=13.5,
         dp_gst=True,
     )
     intraday = _SegmentRates(
@@ -184,7 +241,7 @@ def _zerodha_equity_2024_10_01() -> FeeSchedule:
     futures = _SegmentRates(
         brokerage_flat=20.0,
         brokerage_pct=0.0003,
-        stt_pct=0.0002,  # Zerodha FUT STT historically 0.02% sell — verify on use
+        stt_pct=0.0005,
         stt_on_buy=False,
         stt_on_sell=True,
         exchange_txn_pct=fut_exch,
@@ -192,6 +249,37 @@ def _zerodha_equity_2024_10_01() -> FeeSchedule:
         sebi_per_crore=sebi,
         stamp_pct_buy=0.00002,
         ipft_per_crore=ipft,
+        gst_rate=gst,
+        dp_flat=0.0,
+        dp_gst=False,
+    )
+    options = _SegmentRates(
+        brokerage_flat=20.0,
+        brokerage_pct=0.0,
+        stt_pct=0.0015,
+        stt_on_buy=False,
+        stt_on_sell=True,
+        exchange_txn_pct=0.03503 / 100.0,
+        clearing_pct=0.0,
+        sebi_per_crore=sebi,
+        stamp_pct_buy=0.00003,
+        ipft_per_crore=50.0,
+        gst_rate=gst,
+        dp_flat=0.0,
+        dp_gst=False,
+        turnover_basis="premium",
+    )
+    mf = _SegmentRates(
+        brokerage_flat=0.0,
+        brokerage_pct=0.0,
+        stt_pct=0.0,
+        stt_on_buy=False,
+        stt_on_sell=False,
+        exchange_txn_pct=0.0,
+        clearing_pct=0.0,
+        sebi_per_crore=0.0,
+        stamp_pct_buy=0.0,
+        ipft_per_crore=0.0,
         gst_rate=gst,
         dp_flat=0.0,
         dp_gst=False,
@@ -205,7 +293,9 @@ def _zerodha_equity_2024_10_01() -> FeeSchedule:
         equity_delivery=delivery,
         equity_intraday=intraday,
         futures=futures,
-        notes="Alternate broker profile only. Never selected when charges_broker=fyers.",
+        equity_options=options,
+        mutual_fund=mf,
+        notes="Alternate broker profile only. Never applied when charges_broker=fyers.",
     )
 
 
@@ -221,7 +311,7 @@ def list_schedules() -> list[FeeSchedule]:
 
 def _parse_as_of(as_of: date | datetime | str | None) -> date:
     if as_of is None:
-        return date.today()
+        return datetime.now(IST).date()
     if isinstance(as_of, datetime):
         return as_of.date()
     if isinstance(as_of, date):
@@ -245,24 +335,91 @@ def resolve_schedule(broker: str, as_of: date | datetime | str | None = None) ->
 
 def _rates_for(schedule: FeeSchedule, segment: Segment | str) -> _SegmentRates:
     seg = Segment(segment) if not isinstance(segment, Segment) else segment
-    if seg == Segment.EQUITY_DELIVERY:
-        return schedule.equity_delivery
-    if seg == Segment.EQUITY_INTRADAY:
-        return schedule.equity_intraday
-    if seg == Segment.FUTURES:
-        return schedule.futures
-    raise ValueError(f"Unsupported segment: {segment}")
+    mapping = {
+        Segment.EQUITY_DELIVERY: schedule.equity_delivery,
+        Segment.EQUITY_INTRADAY: schedule.equity_intraday,
+        Segment.FUTURES: schedule.futures,
+        Segment.EQUITY_OPTIONS: schedule.equity_options,
+        Segment.MUTUAL_FUND: schedule.mutual_fund,
+    }
+    if seg not in mapping:
+        raise ValueError(f"Unsupported segment: {segment}")
+    return mapping[seg]
 
 
-def _brokerage(rates: _SegmentRates, turnover: float) -> float:
+def _brokerage_for_turnover(rates: _SegmentRates, turnover: float) -> float:
     if rates.brokerage_pct <= 0 and rates.brokerage_flat <= 0:
         return 0.0
     if rates.brokerage_pct <= 0:
-        return float(rates.brokerage_flat)
+        return _money(rates.brokerage_flat)
     pct_amt = turnover * rates.brokerage_pct
     if rates.brokerage_flat <= 0:
-        return pct_amt
-    return float(min(rates.brokerage_flat, pct_amt))
+        return _money(pct_amt)
+    return _money(min(rates.brokerage_flat, pct_amt))
+
+
+def _normalize_isin(isin: str | None, symbol: str | None = None) -> str | None:
+    if isin:
+        return isin.strip().upper()
+    if symbol:
+        return symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+    return None
+
+
+def _parse_trade_date(trade_date: date | datetime | str | None) -> date:
+    if trade_date is None:
+        return datetime.now(IST).date()
+    if isinstance(trade_date, datetime):
+        return trade_date.astimezone(IST).date() if trade_date.tzinfo else trade_date.date()
+    if isinstance(trade_date, date):
+        return trade_date
+    return date.fromisoformat(str(trade_date)[:10])
+
+
+@dataclass
+class _OrderState:
+    side: Side
+    segment: Segment
+    turnover: float = 0.0
+    brokerage_allocated: float = 0.0
+
+
+@dataclass
+class ChargeSession:
+    """Tracks per-order brokerage aggregation and per-ISIN/day DP."""
+
+    engine: "ChargeEngine"
+    _orders: dict[str, _OrderState] = field(default_factory=dict)
+    _dp_charged: set[tuple[str, date]] = field(default_factory=set)
+
+    def fill(
+        self,
+        *,
+        side: Side | str,
+        qty: float,
+        price: float,
+        segment: Segment | str,
+        order_id: str | None = None,
+        isin: str | None = None,
+        symbol: str | None = None,
+        trade_date: date | datetime | str | None = None,
+        event: str | None = None,
+    ) -> ChargeBreakdown:
+        return self.engine.charges_for_fill(
+            side=side,
+            qty=qty,
+            price=price,
+            segment=segment,
+            order_id=order_id,
+            isin=isin,
+            symbol=symbol,
+            trade_date=trade_date,
+            session=self,
+            event=event,
+        )
+
+    def economics_for_fill(self, **kwargs) -> FillEconomics:
+        return self.engine.economics_for_fill(session=self, **kwargs)
 
 
 class ChargeEngine:
@@ -277,19 +434,18 @@ class ChargeEngine:
         exchange: str = "NSE",
     ):
         self.broker = (broker or BrokerId.FYERS.value).strip().lower()
-        if self.broker == BrokerId.FYERS.value:
-            # Hard guard: never silently fall back to Zerodha math for FYERS
-            pass
         self.as_of = _parse_as_of(as_of)
         self.slippage_pct = float(slippage_pct)
         self.exchange = exchange
         self.schedule = resolve_schedule(self.broker, self.as_of)
 
+    def new_session(self) -> ChargeSession:
+        return ChargeSession(self)
+
     def with_as_of(self, as_of: date | datetime | str | None) -> "ChargeEngine":
         return ChargeEngine(self.broker, as_of=as_of, slippage_pct=self.slippage_pct, exchange=self.exchange)
 
     def slipped_price(self, price: float, side: Side | str) -> float:
-        """Market impact only — no fees embedded."""
         s = Side(side) if not isinstance(side, Side) else side
         if price <= 0:
             return price
@@ -304,18 +460,48 @@ class ChargeEngine:
         qty: float,
         price: float,
         segment: Segment | str = Segment.EQUITY_DELIVERY,
+        order_id: str | None = None,
+        isin: str | None = None,
+        symbol: str | None = None,
+        trade_date: date | datetime | str | None = None,
+        session: ChargeSession | None = None,
         apply_dp: bool | None = None,
+        event: str | None = None,
     ) -> ChargeBreakdown:
         s = Side(side) if not isinstance(side, Side) else side
         seg = Segment(segment) if not isinstance(segment, Segment) else segment
         rates = _rates_for(self.schedule, seg)
         qty = float(qty)
         price = float(price)
-        if qty <= 0 or price <= 0:
-            raise ValueError("qty and price must be positive")
-        turnover = qty * price
+        if qty <= 0 or price < 0 or (price == 0 and seg != Segment.MUTUAL_FUND):
+            raise ValueError("qty must be positive and price non-negative")
 
-        brokerage = _brokerage(rates, turnover)
+        turnover = qty * price
+        td = _parse_trade_date(trade_date)
+        isin_key = _normalize_isin(isin, symbol)
+
+        # --- Brokerage (order-level) ---
+        oid = order_id or f"__anon_{id(object())}_{s.value}_{seg.value}_{turnover}"
+        if session is None:
+            brokerage = _brokerage_for_turnover(rates, turnover)
+            brokerage_order_total = brokerage
+        else:
+            st = session._orders.get(oid)
+            if st is None:
+                st = _OrderState(side=s, segment=seg)
+                session._orders[oid] = st
+            else:
+                if st.side != s:
+                    raise ValueError(f"Order {oid} side mismatch: {st.side} vs {s}")
+                if st.segment != seg:
+                    raise ValueError(f"Order {oid} segment mismatch: {st.segment} vs {seg}")
+            st.turnover += turnover
+            order_brokerage = _brokerage_for_turnover(rates, st.turnover)
+            brokerage = _money(max(0.0, order_brokerage - st.brokerage_allocated))
+            st.brokerage_allocated = order_brokerage
+            brokerage_order_total = order_brokerage
+
+        # --- Statutory on this fill ---
         stt = 0.0
         if s == Side.BUY and rates.stt_on_buy:
             stt = turnover * rates.stt_pct
@@ -328,18 +514,56 @@ class ChargeEngine:
         ipft = turnover * (rates.ipft_per_crore / CRORE)
         stamp = turnover * rates.stamp_pct_buy if s == Side.BUY else 0.0
 
-        # GST on brokerage + exchange + clearing + SEBI + IPFT (not STT/stamp/DP base before GST rules)
+        # GST base per FYERS charges-list: brokerage + exch + clearing + SEBI + IPFT
+        # (not STT, not stamp). DP GST added separately when DP applies.
         gst_base = brokerage + exchange_txn + clearing + sebi + ipft
         gst = gst_base * rates.gst_rate
 
+        # --- DP once per ISIN per day (delivery sell only) ---
         dp = 0.0
-        use_dp = rates.dp_flat > 0 if apply_dp is None else apply_dp
-        if s == Side.SELL and use_dp and rates.dp_flat > 0:
-            dp = rates.dp_flat
-            if rates.dp_gst:
-                gst += rates.dp_flat * rates.gst_rate
+        if seg == Segment.EQUITY_DELIVERY and s == Side.SELL and rates.dp_flat > 0:
+            charge_dp = False
+            if apply_dp is True:
+                charge_dp = True
+            elif apply_dp is False:
+                charge_dp = False
+            elif session is not None and isin_key:
+                key = (isin_key, td)
+                if key not in session._dp_charged:
+                    charge_dp = True
+                    session._dp_charged.add(key)
+            elif session is None:
+                # No session: treat as first debit of the day for this call
+                charge_dp = True if apply_dp is None else bool(apply_dp)
+            if charge_dp:
+                dp = rates.dp_flat
+                if rates.dp_gst:
+                    gst += rates.dp_flat * rates.gst_rate
 
-        total = brokerage + stt + exchange_txn + clearing + sebi + stamp + ipft + gst + dp
+        # --- Optional event charges (not invented for normal paper) ---
+        other = 0.0
+        if event == "call_and_trade":
+            other = self.schedule.call_and_trade
+            gst += other * rates.gst_rate
+        elif event == "admin_square_off":
+            other = self.schedule.admin_square_off
+            gst += other * rates.gst_rate
+        elif event in ("pledge", "unpledge") and self.schedule.pledge_unpledge > 0:
+            other = self.schedule.pledge_unpledge
+            gst += other * rates.gst_rate
+
+        brokerage = _money(brokerage)
+        stt = _money(stt)
+        exchange_txn = _money(exchange_txn)
+        clearing = _money(clearing)
+        sebi = _money(sebi)
+        stamp = _money(stamp)
+        ipft = _money(ipft)
+        gst = _money(gst)
+        dp = _money(dp)
+        other = _money(other)
+        total = _money(brokerage + stt + exchange_txn + clearing + sebi + stamp + ipft + gst + dp + other)
+
         return ChargeBreakdown(
             broker=self.schedule.broker,
             schedule_id=self.schedule.schedule_id,
@@ -348,17 +572,22 @@ class ChargeEngine:
             side=s.value,
             qty=qty,
             price=price,
-            turnover=round(turnover, 6),
-            brokerage=round(brokerage, 6),
-            stt=round(stt, 6),
-            exchange_txn=round(exchange_txn, 6),
-            clearing=round(clearing, 6),
-            sebi=round(sebi, 6),
-            stamp=round(stamp, 6),
-            ipft=round(ipft, 6),
-            gst=round(gst, 6),
-            dp=round(dp, 6),
-            total_fees=round(total, 6),
+            turnover=_money(turnover),
+            brokerage=brokerage,
+            stt=stt,
+            exchange_txn=exchange_txn,
+            clearing=clearing,
+            sebi=sebi,
+            stamp=stamp,
+            ipft=ipft,
+            gst=gst,
+            dp=dp,
+            other=other,
+            total_fees=total,
+            order_id=order_id,
+            isin=isin_key,
+            trade_date=td.isoformat(),
+            brokerage_order_total=_money(brokerage_order_total),
             source_urls=self.schedule.source_urls,
             notes=self.schedule.notes,
         )
@@ -370,13 +599,29 @@ class ChargeEngine:
         qty: float,
         raw_price: float,
         segment: Segment | str = Segment.EQUITY_DELIVERY,
-        apply_dp: bool | None = None,
         apply_slippage: bool = True,
+        session: ChargeSession | None = None,
+        order_id: str | None = None,
+        isin: str | None = None,
+        symbol: str | None = None,
+        trade_date: date | datetime | str | None = None,
+        apply_dp: bool | None = None,
+        event: str | None = None,
     ) -> FillEconomics:
         s = Side(side) if not isinstance(side, Side) else side
         exec_px = self.slipped_price(raw_price, s) if apply_slippage else float(raw_price)
         charges = self.charges_for_fill(
-            side=s, qty=qty, price=exec_px, segment=segment, apply_dp=apply_dp
+            side=s,
+            qty=qty,
+            price=exec_px,
+            segment=segment,
+            order_id=order_id,
+            isin=isin,
+            symbol=symbol,
+            trade_date=trade_date,
+            session=session,
+            apply_dp=apply_dp,
+            event=event,
         )
         notional = exec_px * float(qty)
         slip_rupees = abs(exec_px - float(raw_price)) * float(qty)
@@ -387,11 +632,11 @@ class ChargeEngine:
         return FillEconomics(
             raw_price=float(raw_price),
             exec_price=exec_px,
-            slippage_rupees=round(slip_rupees, 6),
+            slippage_rupees=_money(slip_rupees),
             charges=charges,
-            notional=round(notional, 6),
+            notional=_money(notional),
             total_fees=charges.total_fees,
-            cash_delta=round(cash_delta, 6),
+            cash_delta=_money(cash_delta),
         )
 
     def reconcile_round_trip(
@@ -404,15 +649,28 @@ class ChargeEngine:
             raise ValueError("buy fill must be BUY")
         if not sells:
             raise ValueError("at least one sell fill required")
+        buy_seg = buy.charges.segment
+        for s in sells:
+            if s.charges.side != Side.SELL.value:
+                raise ValueError("sell fills must be SELL")
+            if s.charges.segment != buy_seg:
+                raise ValueError(
+                    f"segment mismatch: buy={buy_seg} sell={s.charges.segment}"
+                )
         qty_bought = buy.charges.qty
         qty_sold = sum(s.charges.qty for s in sells)
-        # Gross using slipped notionals (fees excluded)
+        if qty_sold > qty_bought + 1e-9:
+            raise ValueError(f"sold qty {qty_sold} exceeds bought qty {qty_bought}")
+
         sell_notional = sum(s.notional for s in sells)
         buy_notional_sold = buy.exec_price * qty_sold
         gross = sell_notional - buy_notional_sold
         fees = buy.total_fees + sum(s.total_fees for s in sells)
         slip = buy.slippage_rupees + sum(s.slippage_rupees for s in sells)
-        # Net from cash: sum cash_deltas for matched qty (buy fees allocated pro-rata if partial)
+        brokerage = buy.charges.brokerage + sum(s.charges.brokerage for s in sells)
+        dp = buy.charges.dp + sum(s.charges.dp for s in sells)
+        statutory = fees - brokerage - dp
+
         buy_fee_alloc = buy.total_fees * (qty_sold / qty_bought) if qty_bought else 0.0
         buy_cash_for_sold = -(buy.exec_price * qty_sold + buy_fee_alloc)
         sell_cash = sum(s.cash_delta for s in sells)
@@ -420,10 +678,13 @@ class ChargeEngine:
         return RoundTripEconomics(
             buy=buy,
             sells=tuple(sells),
-            gross_pnl=round(gross, 6),
-            total_fees=round(fees, 6),
-            total_slippage=round(slip, 6),
-            net_pnl=round(net, 6),
+            gross_pnl=_money(gross),
+            total_fees=_money(fees),
+            total_slippage=_money(slip),
+            brokerage=_money(brokerage),
+            statutory=_money(statutory),
+            dp=_money(dp),
+            net_pnl=_money(net),
             qty_bought=qty_bought,
             qty_sold=qty_sold,
         )
@@ -436,12 +697,28 @@ class ChargeEngine:
         segment: Segment | str = Segment.EQUITY_DELIVERY,
         include_slippage: bool = True,
     ) -> float:
-        """Approximate round-trip fee(+optional slip) as fraction of entry notional."""
+        session = self.new_session()
         buy = self.economics_for_fill(
-            side=Side.BUY, qty=qty, raw_price=price, segment=segment, apply_slippage=include_slippage
+            side=Side.BUY,
+            qty=qty,
+            raw_price=price,
+            segment=segment,
+            apply_slippage=include_slippage,
+            session=session,
+            order_id="rt_buy",
+            symbol="SAMPLE",
+            trade_date=self.as_of,
         )
         sell = self.economics_for_fill(
-            side=Side.SELL, qty=qty, raw_price=price, segment=segment, apply_slippage=include_slippage
+            side=Side.SELL,
+            qty=qty,
+            raw_price=price,
+            segment=segment,
+            apply_slippage=include_slippage,
+            session=session,
+            order_id="rt_sell",
+            symbol="SAMPLE",
+            trade_date=self.as_of,
         )
         rt = self.reconcile_round_trip(buy=buy, sells=[sell])
         base = price * qty
@@ -458,6 +735,12 @@ class ChargeEngine:
             "notes": s.notes,
             "as_of": self.as_of.isoformat(),
             "slippage_pct": self.slippage_pct,
+            "account_opening": s.account_opening,
+            "amc": s.amc,
+            "ipft_policy": (
+                "equity/futures ₹0.01 per crore from fyers.in/charges-list; "
+                "KB cites ₹10/crore — charges-list used"
+            ),
         }
 
 

@@ -246,19 +246,24 @@ def journal_close(
     init_db()
     seg = Segment(segment or DEFAULT.default_segment)
     engine = default_charge_engine()
+    session = engine.new_session()
     with _conn() as cx:
         row = cx.execute("SELECT * FROM journal WHERE id=?", (journal_id,)).fetchone()
         if not row:
             raise ValueError("journal id not found")
         qty = float(row["qty"])
         entry = float(row["entry_price"])
+        stock = str(row["stock"])
         buy = engine.economics_for_fill(
             side=Side.BUY,
             qty=qty,
             raw_price=entry,
             segment=seg,
             apply_slippage=apply_slippage,
-            apply_dp=False,
+            session=session,
+            order_id=f"journal-buy-{journal_id}",
+            symbol=stock,
+            trade_date=row["entry_at"],
         )
         sell = engine.economics_for_fill(
             side=Side.SELL,
@@ -266,13 +271,15 @@ def journal_close(
             raw_price=float(exit_price),
             segment=seg,
             apply_slippage=apply_slippage,
-            apply_dp=(seg == Segment.EQUITY_DELIVERY),
+            session=session,
+            order_id=f"journal-sell-{journal_id}",
+            symbol=stock,
+            trade_date=_now().isoformat(),
         )
         rt = engine.reconcile_round_trip(buy=buy, sells=[sell])
-        # Persist user-entered prices; pnl columns are net after fees
         gross = (float(exit_price) - entry) * qty
         fees = rt.total_fees
-        net = rt.net_pnl if apply_slippage else (gross - fees)
+        net = rt.net_pnl
         pnl_pct = net / (entry * qty) if entry and qty else 0.0
         charges_blob = json.dumps({"buy": buy.charges.to_dict(), "sell": sell.charges.to_dict()})
         cx.execute(
