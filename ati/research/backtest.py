@@ -1,4 +1,4 @@
-"""Event-driven swing backtest with Indian cost model."""
+"""Event-driven swing backtest with ChargeEngine net cost model."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import pandas as pd
 from ati.config import RiskConfig, DEFAULT
 from ati.engine.risk import RiskEngine
 from ati.indicators.technical import enrich
+from ati.models.charges import Segment, Side
 
 
 @dataclass
@@ -48,6 +49,45 @@ def _stability(trade_returns: np.ndarray) -> float:
     return float(np.clip(base * (1.1 if same_sign else 0.7), 0, 1))
 
 
+def _bt_buy(engine: RiskEngine, cash: float, raw_price: float, qty: int) -> tuple[float, dict | None]:
+    eco = engine.charges.economics_for_fill(
+        side=Side.BUY, qty=qty, raw_price=raw_price, segment=Segment.EQUITY_DELIVERY
+    )
+    if -eco.cash_delta > cash:
+        return cash, None
+    return cash + eco.cash_delta, {
+        "entry": eco.exec_price,
+        "qty": qty,
+        "entry_fees": eco.total_fees,
+        "bars": 0,
+    }
+
+
+def _bt_sell(engine: RiskEngine, cash: float, pos: dict, raw_exit: float, reason: str, symbol: str) -> tuple[float, dict]:
+    eco = engine.charges.economics_for_fill(
+        side=Side.SELL,
+        qty=pos["qty"],
+        raw_price=raw_exit,
+        segment=Segment.EQUITY_DELIVERY,
+        apply_dp=True,
+    )
+    gross = (eco.exec_price - pos["entry"]) * pos["qty"]
+    fees = eco.total_fees + float(pos.get("entry_fees") or 0.0)
+    net = gross - fees
+    trade = {
+        "symbol": symbol,
+        "entry": pos["entry"],
+        "exit": eco.exec_price,
+        "pnl": net,
+        "gross_pnl": gross,
+        "fees": fees,
+        "ret": net / (pos["entry"] * pos["qty"]),
+        "bars": pos["bars"],
+        "reason": reason,
+    }
+    return cash + eco.cash_delta, trade
+
+
 def run_breakout_momentum_baseline(
     frames: dict[str, pd.DataFrame],
     *,
@@ -81,52 +121,16 @@ def run_breakout_momentum_baseline(
             pos["bars"] += 1
             # stop / target
             if bar["Low"] <= pos["stop"]:
-                px = engine.apply_sell_slippage(pos["stop"])
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "stop",
-                    }
-                )
+                cash, trade = _bt_sell(engine, cash, pos, float(pos["stop"]), "stop", sym)
+                trades.append(trade)
                 to_close.append(sym)
             elif bar["High"] >= pos["target"]:
-                px = engine.apply_sell_slippage(pos["target"])
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "target",
-                    }
-                )
+                cash, trade = _bt_sell(engine, cash, pos, float(pos["target"]), "target", sym)
+                trades.append(trade)
                 to_close.append(sym)
             elif pos["bars"] >= 20:
-                px = engine.apply_sell_slippage(float(bar["Close"]))
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "time",
-                    }
-                )
+                cash, trade = _bt_sell(engine, cash, pos, float(bar["Close"]), "time", sym)
+                trades.append(trade)
                 to_close.append(sym)
         for sym in to_close:
             open_pos.pop(sym, None)
@@ -157,21 +161,26 @@ def run_breakout_momentum_baseline(
                     and row["rsi_14"] < 72
                 ):
                     continue
-                entry = engine.apply_buy_slippage(float(row["Close"]))
-                stop = float(row["Close"] - 2.2 * row["atr_14"])
+                raw = float(row["Close"])
+                entry_est = engine.apply_buy_slippage(raw)
+                stop = float(raw - 2.2 * row["atr_14"])
                 # Prefer structural stop under recent swing if tighter risk still >= 0.5%
                 swing = float(df["Low"].iloc[max(0, i - 10) : i + 1].min())
-                if swing < entry and (entry - swing) / entry <= 0.08:
+                if swing < entry_est and (entry_est - swing) / entry_est <= 0.08:
                     stop = max(stop, swing)
-                if stop >= entry:
+                if stop >= entry_est:
                     continue
                 risk_amt = equity * risk.risk_per_trade_pct
-                qty = int(risk_amt // (entry - stop))
-                if qty < 1 or qty * entry > cash:
+                qty = int(risk_amt // (entry_est - stop))
+                if qty < 1:
                     continue
-                target = entry + 2.5 * (entry - stop)
-                cash -= entry * qty
-                open_pos[sym] = {"entry": entry, "stop": stop, "target": target, "qty": qty, "bars": 0}
+                target = entry_est + 2.5 * (entry_est - stop)
+                cash, pos = _bt_buy(engine, cash, raw, qty)
+                if pos is None:
+                    continue
+                pos["stop"] = stop
+                pos["target"] = target
+                open_pos[sym] = pos
                 if len(open_pos) >= risk.max_positions:
                     break
 
@@ -190,20 +199,9 @@ def run_breakout_momentum_baseline(
         last_dt = curve[-1][0]
         for sym, pos in list(open_pos.items()):
             df = enriched.get(sym)
-            px = float(df.loc[last_dt, "Close"]) if df is not None and last_dt in df.index else pos["entry"]
-            px = engine.apply_sell_slippage(px)
-            pnl = (px - pos["entry"]) * pos["qty"]
-            trades.append(
-                {
-                    "symbol": sym,
-                    "entry": pos["entry"],
-                    "exit": px,
-                    "pnl": pnl,
-                    "ret": pnl / (pos["entry"] * pos["qty"]),
-                    "bars": pos["bars"],
-                    "reason": "eod_flatten",
-                }
-            )
+            raw = float(df.loc[last_dt, "Close"]) if df is not None and last_dt in df.index else pos["entry"]
+            cash, trade = _bt_sell(engine, cash, pos, raw, "eod_flatten", sym)
+            trades.append(trade)
 
     trade_log = pd.DataFrame(trades)
     eq = pd.Series({d: v for d, v in curve}).sort_index()
@@ -279,52 +277,16 @@ def run_pullback_trend_baseline(
             bar = df.loc[dt]
             pos["bars"] += 1
             if bar["Low"] <= pos["stop"]:
-                px = engine.apply_sell_slippage(pos["stop"])
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "stop",
-                    }
-                )
+                cash, trade = _bt_sell(engine, cash, pos, float(pos["stop"]), "stop", sym)
+                trades.append(trade)
                 to_close.append(sym)
             elif bar["High"] >= pos["target"]:
-                px = engine.apply_sell_slippage(pos["target"])
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "target",
-                    }
-                )
+                cash, trade = _bt_sell(engine, cash, pos, float(pos["target"]), "target", sym)
+                trades.append(trade)
                 to_close.append(sym)
             elif pos["bars"] >= 25:
-                px = engine.apply_sell_slippage(float(bar["Close"]))
-                pnl = (px - pos["entry"]) * pos["qty"]
-                cash += px * pos["qty"]
-                trades.append(
-                    {
-                        "symbol": sym,
-                        "entry": pos["entry"],
-                        "exit": px,
-                        "pnl": pnl,
-                        "ret": pnl / (pos["entry"] * pos["qty"]),
-                        "bars": pos["bars"],
-                        "reason": "time",
-                    }
-                )
+                cash, trade = _bt_sell(engine, cash, pos, float(bar["Close"]), "time", sym)
+                trades.append(trade)
                 to_close.append(sym)
         for sym in to_close:
             open_pos.pop(sym, None)
@@ -346,16 +308,21 @@ def run_pullback_trend_baseline(
                     and 35 <= row["rsi_14"] <= 55
                 ):
                     continue
-                entry = engine.apply_buy_slippage(float(row["Close"]))
-                stop = float(min(df["Low"].iloc[i - 10 : i + 1].min(), entry - 2.0 * row["atr_14"]))
-                if stop >= entry:
+                raw = float(row["Close"])
+                entry_est = engine.apply_buy_slippage(raw)
+                stop = float(min(df["Low"].iloc[i - 10 : i + 1].min(), entry_est - 2.0 * row["atr_14"]))
+                if stop >= entry_est:
                     continue
-                qty = int((equity * risk.risk_per_trade_pct) // (entry - stop))
-                if qty < 1 or qty * entry > cash:
+                qty = int((equity * risk.risk_per_trade_pct) // (entry_est - stop))
+                if qty < 1:
                     continue
-                target = entry + 2.5 * (entry - stop)
-                cash -= entry * qty
-                open_pos[sym] = {"entry": entry, "stop": stop, "target": target, "qty": qty, "bars": 0}
+                target = entry_est + 2.5 * (entry_est - stop)
+                cash, pos = _bt_buy(engine, cash, raw, qty)
+                if pos is None:
+                    continue
+                pos["stop"] = stop
+                pos["target"] = target
+                open_pos[sym] = pos
                 if len(open_pos) >= risk.max_positions:
                     break
 
