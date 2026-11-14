@@ -442,12 +442,17 @@ def watch(
     )
 
 
-@app.command("zerodha-status")
-def zerodha_status():
-    """Fetch live Zerodha positions / P&L (requires KITE_* env secrets)."""
-    from ati.brokers.zerodha import fetch_live_snapshot
+@app.command("journal")
+def journal_cmd(
+    action: str = typer.Argument("list", help="list|stats"),
+):
+    """Manual trade journal + suggestion performance (no broker API)."""
+    from ati.journal.store import list_journal, performance_stats
 
-    console.print_json(data=fetch_live_snapshot().to_dict())
+    if action == "stats":
+        console.print_json(data=performance_stats())
+    else:
+        console.print_json(data={"journal": list_journal(limit=50), "performance": performance_stats()})
 
 
 @app.command("desk-snapshot")
